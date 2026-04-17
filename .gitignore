@@ -1,3 +1,9 @@
+bags/
+sprint1_evidence/
+*.pcd
+autopass_env/
+*.db3
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
