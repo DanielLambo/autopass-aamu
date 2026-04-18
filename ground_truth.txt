@@ -1,0 +1,4 @@
+feature_id, width_cm, description
+door_01, 91.4, bedroom door width, frame to frame at floor level
+passage_01, 118.9, gap between door and wall
+passage_02, 97.5, gap between bed and wall
