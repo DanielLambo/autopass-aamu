@@ -18,8 +18,8 @@ Sensor → Preprocessing → Plane segmentation → Feature detection → Passab
 
 - [x] Sprint 1: LiDAR + ROS2 pipeline stable
 - [ ] Sprint 2: Record rosbag dataset
-- [ ] Sprint 3: Preprocessing pipeline (voxel, outlier removal, ROI)
-- [ ] Sprint 4: Floor + wall segmentation (RANSAC)
+- [x] Sprint 3: Preprocessing pipeline (voxel, outlier removal, ROI)
+- [x] Sprint 4: Floor + wall segmentation (RANSAC)
 - [ ] Sprint 5: Progress report to advisor
 
 ## Platform
