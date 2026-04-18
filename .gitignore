@@ -1,6 +1,7 @@
 bags/
 sprint1_evidence/
 *.pcd
+data/
 autopass_env/
 *.db3
 
