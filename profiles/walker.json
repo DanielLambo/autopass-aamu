@@ -1,0 +1,10 @@
+{
+  "name": "walker",
+  "description": "Standard four-leg or wheeled walker: more permissive on width, stricter on threshold lip height",
+  "min_corridor_width_m": 0.81,
+  "min_doorway_width_m": 0.76,
+  "max_threshold_height_m": 0.006,
+  "max_slope_deg": 4.76,
+  "max_cross_slope_deg": 1.15,
+  "source": "Walker users typically clear a 30\" / 0.76 m doorway; threshold limit tightened to 0.006 m (~0.25\") because walker glides and front wheels catch on lips that a wheelchair caster would roll over"
+}

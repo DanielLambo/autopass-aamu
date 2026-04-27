@@ -1,0 +1,10 @@
+{
+  "name": "wheelchair",
+  "description": "Manual or power wheelchair: ADA minimums plus realistic clearance for chair maneuvering",
+  "min_corridor_width_m": 0.95,
+  "min_doorway_width_m": 0.813,
+  "max_threshold_height_m": 0.0127,
+  "max_slope_deg": 4.76,
+  "max_cross_slope_deg": 1.15,
+  "source": "ADA Standards 2010 §404.2.3 (doorway) and §405.2 (slope) form the floor; corridor tightened to 0.95 m to absorb power-chair turning radius and lateral sway noted in ICC A117.1 commentary"
+}

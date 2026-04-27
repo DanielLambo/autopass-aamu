@@ -1,0 +1,10 @@
+{
+  "name": "ada_default",
+  "description": "Vanilla ADA Standards for Accessible Design (2010) minimums",
+  "min_corridor_width_m": 0.914,
+  "min_doorway_width_m": 0.813,
+  "max_threshold_height_m": 0.0127,
+  "max_slope_deg": 4.76,
+  "max_cross_slope_deg": 1.15,
+  "source": "ADA Standards for Accessible Design (2010): §404.2.3 (32\" / 0.813 m clear doorway), §403.5.1 (36\" / 0.914 m corridor), §303.3 (0.5\" / 0.0127 m unbeveled threshold), §405.2 (1:12 / 4.76 deg max ramp running slope), §403.3 (1:48 / 1.15 deg max cross slope)"
+}
