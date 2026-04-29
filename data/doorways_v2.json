@@ -1,0 +1,135 @@
+[
+  {
+    "source_wall": "wall_01",
+    "gap_start_xy": [
+      1.051,
+      -1.577
+    ],
+    "gap_end_xy": [
+      1.136,
+      -0.48
+    ],
+    "gap_center_xy": [
+      1.093,
+      -1.029
+    ],
+    "width_m": 1.1,
+    "flanking_density_left": 5.0,
+    "flanking_density_right": 5.0,
+    "confidence": 0.62
+  },
+  {
+    "source_wall": "wall_01",
+    "gap_start_xy": [
+      1.14,
+      -0.431
+    ],
+    "gap_end_xy": [
+      1.214,
+      0.517
+    ],
+    "gap_center_xy": [
+      1.177,
+      0.043
+    ],
+    "width_m": 0.95,
+    "flanking_density_left": 5.0,
+    "flanking_density_right": 5.0,
+    "confidence": 0.62
+  },
+  {
+    "source_wall": "wall_02",
+    "gap_start_xy": [
+      -1.01,
+      -2.584
+    ],
+    "gap_end_xy": [
+      -0.628,
+      -2.058
+    ],
+    "gap_center_xy": [
+      -0.819,
+      -2.321
+    ],
+    "width_m": 0.65,
+    "flanking_density_left": 10.0,
+    "flanking_density_right": 5.0,
+    "confidence": 0.71
+  },
+  {
+    "source_wall": "wall_02",
+    "gap_start_xy": [
+      0.901,
+      0.045
+    ],
+    "gap_end_xy": [
+      1.254,
+      0.53
+    ],
+    "gap_center_xy": [
+      1.078,
+      0.287
+    ],
+    "width_m": 0.6,
+    "flanking_density_left": 5.0,
+    "flanking_density_right": 10.0,
+    "confidence": 0.71
+  },
+  {
+    "source_wall": "wall_03",
+    "gap_start_xy": [
+      1.129,
+      -1.629
+    ],
+    "gap_end_xy": [
+      1.271,
+      -0.086
+    ],
+    "gap_center_xy": [
+      1.2,
+      -0.858
+    ],
+    "width_m": 1.55,
+    "flanking_density_left": 9.0,
+    "flanking_density_right": 5.0,
+    "confidence": 0.56
+  },
+  {
+    "source_wall": "wall_03",
+    "gap_start_xy": [
+      1.275,
+      -0.036
+    ],
+    "gap_end_xy": [
+      1.33,
+      0.561
+    ],
+    "gap_center_xy": [
+      1.303,
+      0.263
+    ],
+    "width_m": 0.6,
+    "flanking_density_left": 5.0,
+    "flanking_density_right": 5.0,
+    "confidence": 0.56
+  },
+  {
+    "source_wall": "wall_04",
+    "gap_start_xy": [
+      0.592,
+      0.064
+    ],
+    "gap_end_xy": [
+      1.084,
+      0.694
+    ],
+    "gap_center_xy": [
+      0.838,
+      0.379
+    ],
+    "width_m": 0.8,
+    "flanking_density_left": 7.0,
+    "flanking_density_right": 6.0,
+    "confidence": 0.86
+  }
+]
