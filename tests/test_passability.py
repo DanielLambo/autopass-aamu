@@ -30,7 +30,7 @@ def ada():
 
 
 def test_doorway_just_passing_wheelchair(wheelchair):
-    r = classify({"type": "doorway", "width_m": 0.85}, wheelchair)
+    r = classify({"type": "doorway", "width_m": 0.90}, wheelchair)
     assert r.status == "pass"
     assert r.failed_constraints == []
     assert r.profile_name == "wheelchair"
@@ -45,6 +45,12 @@ def test_doorway_just_failing_wheelchair(wheelchair):
 
 def test_doorway_in_flag_zone(wheelchair):
     r = classify({"type": "doorway", "width_m": 0.83}, wheelchair)
+    assert r.status == "flag"
+
+
+def test_doorway_flag_zone_below(wheelchair):
+    """0.77 m is just under the limit (margin = -0.043) but within ±5 cm zone."""
+    r = classify({"type": "doorway", "width_m": 0.77}, wheelchair)
     assert r.status == "flag"
 
 

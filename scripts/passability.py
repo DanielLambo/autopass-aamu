@@ -18,7 +18,7 @@ Flag-zone rationale:
     residual on the order of the inlier distance threshold (0.03-0.05
     m). A doorway width estimate is therefore only trustworthy to within
     a few centimeters even before sensor noise. We treat any value
-    within ±2.5 cm of a hard limit (5 cm total band) as "flag" rather
+    within ±5 cm of a hard limit (10 cm total band) as "flag" rather
     than committing to pass or fail, surfacing the cases where the true
     value could plausibly land on either side. For slope constraints
     the equivalent uncertainty band is ±0.1 deg, the propagated normal-
@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-FLAG_ZONE_M = 0.025
+FLAG_ZONE_M = 0.05
 FLAG_ZONE_DEG = 0.1
 
 _RANK = {"pass": 0, "flag": 1, "fail": 2}
