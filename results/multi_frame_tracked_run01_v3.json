@@ -1,0 +1,47 @@
+{
+  "winning_cluster": {
+    "cluster_id": 0,
+    "center_xy": [
+      0.021,
+      -1.132
+    ],
+    "raw_count": 26,
+    "filtered_count": 25,
+    "rejected": 1,
+    "filtered_widths_cm": [
+      61.72,
+      72.78,
+      70.7,
+      58.23,
+      69.25,
+      91.24,
+      110.62,
+      86.63,
+      63.09,
+      64.02,
+      120.02,
+      94.87,
+      67.91,
+      115.03,
+      63.22,
+      109.49,
+      96.17,
+      101.24,
+      74.33,
+      106.28,
+      69.41,
+      88.35,
+      85.13,
+      99.24,
+      96.03
+    ],
+    "mean_cm": 85.4,
+    "median_cm": 86.63,
+    "std_cm": 18.55,
+    "min_traj_dist_m": 0.266,
+    "transit_threshold_m": 0.5,
+    "selection_method": "closest_cluster_within_transit_threshold"
+  },
+  "gt_clear_cm": 85.3,
+  "gt_rough_cm": 91.4
+}

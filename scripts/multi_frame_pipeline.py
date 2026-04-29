@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
-"""Sprint 8.9: Trajectory-aware cluster scoring for doorway selection.
+"""Sprint 8.10: Geometric transit-threshold selector.
 
-Extracts the robot trajectory from /odom, then scores each gap cluster by
-frame_count * mean_confidence * trajectory_proximity.  A cluster the robot
-physically passed through scores higher than one it only observed from a
-distance — making the selection geometrically grounded rather than relying
-on width priors or pure frequency.
+Selects the gap cluster whose center is closest to the robot's odometry
+trajectory, subject to a hard transit threshold (TRANSIT_THRESHOLD_M).
+
+Transit threshold rationale:
+    A transited doorway's gap center lies on or very near the robot's
+    path.  TRANSIT_THRESHOLD_M = 0.50 m is derived from geometry, not
+    ground truth: ADA §403.5.1 sets minimum corridor clear width at
+    0.91 m, so a robot walking through the center of ANY passable
+    corridor is at most ~0.46 m from either wall.  A cluster center
+    within 0.50 m of the trajectory polyline is therefore plausibly
+    the passage the robot transited, while clusters further away are
+    observed-but-not-traversed structural features.
+
+    This replaces the combined frame_count * confidence * proximity
+    score from Sprint 8.9 — that formulation required tuning the
+    composition weights, and frame-count dominance caused it to select
+    a persistent non-doorway gap.  The transit-threshold selector uses
+    a single, geometrically motivated cut with no learned parameters.
 """
 from __future__ import annotations
 
@@ -39,6 +52,7 @@ MAX_WALLS = 4; WALL_DIST = 0.03; WALL_NZ = 0.2; WALL_ITERS = 5000; WALL_MIN = 10
 BIN_SIZE = 0.05; MIN_DENS = 5; REOCC = 2; GAP_RANGE = (0.6, 2.0)
 MERGE_DOT = 0.95; MERGE_PERP = 0.30; MERGE_OVERLAP = 0.50
 DBSCAN_EPS = 0.30; DBSCAN_MIN = 3; SIGMA_REJECT = 2.0
+TRANSIT_THRESHOLD_M = 0.50
 
 POINTFIELD_DTYPES = {1:("B",1),2:("b",1),3:("H",2),4:("h",2),
                      5:("I",4),6:("i",4),7:("f",4),8:("d",8)}
@@ -208,7 +222,7 @@ def main():
     args = ap.parse_args()
     indices = list(range(args.frame_start, args.frame_end+1, args.frame_step))
 
-    print(f"Sprint 8.9: trajectory-aware clustering — {len(indices)} frames")
+    print(f"Sprint 8.10: transit-threshold selector — {len(indices)} frames")
 
     # Phase 1: read bag (odom + PC frames in one pass)
     t0 = time.time()
@@ -239,7 +253,7 @@ def main():
         if lab >= 0: clusters.setdefault(lab, []).append(i)
     print(f"  DBSCAN: {len(clusters)} clusters, {(labels==-1).sum()} noise")
 
-    # Phase 4: trajectory-aware scoring
+    # Phase 4: compute per-cluster metadata + trajectory distance
     cluster_stats = []
     for cid, idxs in sorted(clusters.items()):
         ws = np.array([all_gaps[i]["width_m"]*100 for i in idxs])
@@ -249,14 +263,8 @@ def main():
         cy = np.mean([all_gaps[i]["gap_center_xy"][1] for i in idxs])
         cc = np.array([cx, cy])
 
-        # Trajectory proximity: min distance from any robot pose to cluster center
-        poses = np.array([trajectory[fi] for fi in sorted(trajectory)])
-        dists = np.linalg.norm(poses - cc, axis=1)
+        dists = np.linalg.norm(traj_pts - cc, axis=1)
         min_dist = float(dists.min())
-        traj_score = 1.0 / (1.0 + min_dist)
-
-        old_score = len(frs) * float(confs.mean())
-        new_score = old_score * traj_score
 
         cluster_stats.append(dict(
             cluster_id=int(cid), center_xy=[round(cx,3),round(cy,3)],
@@ -266,87 +274,116 @@ def main():
             median_width_cm=round(float(np.median(ws)),2),
             std_width_cm=round(float(ws.std()),2),
             mean_confidence=round(float(confs.mean()),3),
-            min_traj_dist_m=round(min_dist,3),
-            trajectory_proximity_score=round(traj_score,3),
-            old_score=round(old_score,2), score=round(new_score,2)))
+            min_traj_dist_m=round(min_dist,3)))
+        tag = " ◄ transited" if min_dist < TRANSIT_THRESHOLD_M else ""
         print(f"    C{cid}: {len(frs)}fr, mean={ws.mean():.1f}cm, "
-              f"traj_dist={min_dist:.2f}m, score={new_score:.2f} "
-              f"(was {old_score:.1f})")
+              f"traj_dist={min_dist:.3f}m{tag}")
 
-    # Phase 5: winner + 2-sigma filter
-    winner = max(cluster_stats, key=lambda c: c["score"])
-    wid = winner["cluster_id"]
-    print(f"\n  Winner: C{wid} (score={winner['score']:.2f}, "
-          f"traj_dist={winner['min_traj_dist_m']:.3f}m)")
+    # Phase 5: transit-threshold selection (closest cluster within threshold)
+    transited = [c for c in cluster_stats if c["min_traj_dist_m"] < TRANSIT_THRESHOLD_M]
+    if not transited:
+        print("\n  No transited doorway detected in this run.")
+        winner = None
+    else:
+        winner = min(transited, key=lambda c: c["min_traj_dist_m"])
 
-    raw_ws = np.array(winner["widths_cm"])
-    med = np.median(raw_ws); std = raw_ws.std()
-    filt_ws = raw_ws[np.abs(raw_ws - med) <= SIGMA_REJECT * std]
+    wid = winner["cluster_id"] if winner else -1
+    if winner:
+        print(f"\n  Selected: C{wid} (traj_dist={winner['min_traj_dist_m']:.3f}m "
+              f"< {TRANSIT_THRESHOLD_M}m threshold)")
+
+    # 2-sigma filter on winning cluster
+    raw_ws = np.array(winner["widths_cm"]) if winner else np.array([])
+    if len(raw_ws):
+        med = np.median(raw_ws); std = raw_ws.std()
+        filt_ws = raw_ws[np.abs(raw_ws - med) <= SIGMA_REJECT * std]
+    else:
+        filt_ws = np.array([])
     n_rej = len(raw_ws) - len(filt_ws)
 
     final = dict(
-        cluster_id=wid, center_xy=winner["center_xy"],
+        cluster_id=wid if winner else None,
+        center_xy=winner["center_xy"] if winner else None,
         raw_count=len(raw_ws), filtered_count=len(filt_ws), rejected=n_rej,
-        filtered_widths_cm=filt_ws.round(2).tolist(),
+        filtered_widths_cm=filt_ws.round(2).tolist() if len(filt_ws) else [],
         mean_cm=round(float(filt_ws.mean()),2) if len(filt_ws) else None,
         median_cm=round(float(np.median(filt_ws)),2) if len(filt_ws) else None,
         std_cm=round(float(filt_ws.std()),2) if len(filt_ws) else None,
-        trajectory_proximity_score=winner["trajectory_proximity_score"])
+        min_traj_dist_m=winner["min_traj_dist_m"] if winner else None,
+        transit_threshold_m=TRANSIT_THRESHOLD_M,
+        selection_method="closest_cluster_within_transit_threshold")
 
+    # Comparison table
     gt_c, gt_r = 85.3, 91.4
-    print(f"\n  {'Method':<35s} {'Width':>7s} {'Err/clear':>10s} {'MAE':>6s}")
-    print(f"  {'-'*62}")
-    rows = [("Single-frame (8.5)", 74.2),
-            ("Multi-frame raw mean (8.7)", 107.0),
+    print(f"\n  {'Method':<38s} {'Width':>7s} {'vs clear':>9s} {'vs rough':>9s}")
+    print(f"  {'-'*66}")
+    prev = [("Single-frame (8.5)", 74.2),
             ("Multi-frame raw median (8.7)", 95.5),
-            ("Freq-scored cluster (8.8)", 114.4)]
+            ("Persistence-scored C1 (8.8)", 114.4),
+            ("Combined-scored C1 (8.9)", 118.0)]
     if final["mean_cm"]:
-        rows.append(("Traj-scored mean (8.9)", final["mean_cm"]))
-        rows.append(("Traj-scored median (8.9)", final["median_cm"]))
-    for label, w in rows:
-        err = round(w - gt_c, 2)
-        print(f"  {label:<35s} {w:6.1f}  {err:+8.2f} cm  {abs(err):5.2f}")
+        prev.append((f"Transit-threshold C{wid} mean (8.10)", final["mean_cm"]))
+        prev.append((f"Transit-threshold C{wid} median (8.10)", final["median_cm"]))
+    for label, w in prev:
+        ec = round(w - gt_c, 2); er = round(w - gt_r, 2)
+        print(f"  {label:<38s} {w:6.1f}  {ec:+7.1f} cm  {er:+7.1f} cm")
+
+    print(f"  Runtime: {elapsed:.1f}s")
 
     # Save
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     with open(RESULTS_DIR / "clusters_with_trajectory_run01.json", "w") as f:
-        json.dump({"clusters": cluster_stats}, f, indent=2)
-    with open(RESULTS_DIR / "multi_frame_tracked_run01_v2.json", "w") as f:
-        json.dump({"winning_cluster": final, "gt_clear_cm": gt_c, "gt_rough_cm": gt_r}, f, indent=2)
+        json.dump({"clusters": cluster_stats,
+                   "transit_threshold_m": TRANSIT_THRESHOLD_M}, f, indent=2)
+    with open(RESULTS_DIR / "multi_frame_tracked_run01_v3.json", "w") as f:
+        json.dump({"winning_cluster": final,
+                   "gt_clear_cm": gt_c, "gt_rough_cm": gt_r}, f, indent=2)
 
     # Plot
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     clrs = plt.cm.Set1(np.linspace(0, 1, max(len(clusters), 1)))
 
-    # (a) trajectory + clusters
+    # (a) trajectory + clusters with distance labels
     ax = axes[0]
-    ax.plot(traj_pts[:,0], traj_pts[:,1], "b-", lw=2, alpha=0.6, label="robot trajectory")
+    ax.plot(traj_pts[:,0], traj_pts[:,1], "b-", lw=2, alpha=0.6, label="trajectory")
     ax.plot(traj_pts[0,0], traj_pts[0,1], "bs", ms=8, label="start")
     ax.plot(traj_pts[-1,0], traj_pts[-1,1], "b^", ms=8, label="end")
-    for ci, (cid, idxs) in enumerate(sorted(clusters.items())):
+    for ci, cs in enumerate(cluster_stats):
+        cid = cs["cluster_id"]
+        idxs = clusters[cid]
         pts = np.array([all_gaps[i]["gap_center_xy"] for i in idxs])
         is_w = cid == wid
         ax.scatter(pts[:,0], pts[:,1], c="limegreen" if is_w else [clrs[ci%len(clrs)]],
                    s=80 if is_w else 25, marker="*" if is_w else "o",
                    edgecolors="black" if is_w else "none", linewidths=1.5 if is_w else 0,
                    zorder=5 if is_w else 3,
-                   label=f"C{cid}{' ★' if is_w else ''} ({len(idxs)})")
+                   label=f"C{cid}{' ★' if is_w else ''} d={cs['min_traj_dist_m']:.2f}m")
+        ax.annotate(f"{cs['min_traj_dist_m']:.2f}m", cs["center_xy"],
+                    textcoords="offset points", xytext=(6, 6), fontsize=7,
+                    color="darkred" if cs["min_traj_dist_m"] < TRANSIT_THRESHOLD_M else "gray")
     ax.set_xlabel("X (m)"); ax.set_ylabel("Y (m)"); ax.set_aspect("equal")
-    ax.set_title("Trajectory + Gap Clusters"); ax.legend(fontsize=6); ax.grid(True, alpha=0.3)
+    ax.set_title(f"Transit Threshold = {TRANSIT_THRESHOLD_M}m")
+    ax.legend(fontsize=5, loc="lower right"); ax.grid(True, alpha=0.3)
 
-    # (b) trajectory proximity per cluster
+    # (b) min distance per cluster (bar chart, threshold line)
     ax = axes[1]
     cids = [c["cluster_id"] for c in cluster_stats]
-    tscores = [c["trajectory_proximity_score"] for c in cluster_stats]
-    colors = ["limegreen" if c == wid else "#1f77b4" for c in cids]
-    ax.bar([f"C{c}" for c in cids], tscores, color=colors, edgecolor="black")
-    ax.set_ylabel("Proximity Score"); ax.set_title("Trajectory Proximity")
+    mdists = [c["min_traj_dist_m"] for c in cluster_stats]
+    bar_colors = ["limegreen" if c == wid else
+                  ("#aaddaa" if d < TRANSIT_THRESHOLD_M else "#1f77b4")
+                  for c, d in zip(cids, mdists)]
+    ax.bar([f"C{c}" for c in cids], mdists, color=bar_colors, edgecolor="black")
+    ax.axhline(TRANSIT_THRESHOLD_M, color="red", ls="--", lw=2,
+               label=f"threshold = {TRANSIT_THRESHOLD_M}m")
+    ax.set_ylabel("Min Distance to Trajectory (m)")
+    ax.set_title("Distance to Trajectory"); ax.legend(fontsize=8)
     ax.grid(True, axis="y", alpha=0.3)
 
     # (c) winning cluster histogram
     ax = axes[2]
-    ax.hist(raw_ws, bins=10, color="#1f77b4", edgecolor="black", alpha=0.4, label="raw")
+    if len(raw_ws):
+        ax.hist(raw_ws, bins=10, color="#1f77b4", edgecolor="black", alpha=0.4, label="raw")
     if len(filt_ws):
         ax.hist(filt_ws, bins=10, color="#2ca02c", edgecolor="black", alpha=0.6, label="filtered")
         ax.axvline(filt_ws.mean(), color="red", ls="-", lw=2,
@@ -355,14 +392,15 @@ def main():
                    label=f"median={np.median(filt_ws):.1f}")
     ax.axvline(gt_c, color="green", ls=":", lw=2, label=f"GT={gt_c}")
     ax.set_xlabel("Width (cm)"); ax.set_ylabel("Count")
-    ax.set_title(f"C{wid} widths ({n_rej} outliers rejected)")
-    ax.legend(fontsize=7)
+    title = f"C{wid} widths ({n_rej} rejected)" if winner else "No selection"
+    ax.set_title(title); ax.legend(fontsize=7)
 
-    plt.suptitle(f"Sprint 8.9: Trajectory-Aware Scoring | {np.datetime64('today')}", fontsize=12)
+    plt.suptitle(f"Sprint 8.10: Transit-Threshold Selector | "
+                 f"{np.datetime64('today')}", fontsize=12)
     plt.tight_layout()
-    plt.savefig(str(FIG_DIR / "sprint8_9_trajectory.png"), dpi=150, facecolor="white")
+    plt.savefig(str(FIG_DIR / "sprint8_10_selection.png"), dpi=150, facecolor="white")
     plt.close()
-    print(f"\n  Viz: {FIG_DIR / 'sprint8_9_trajectory.png'}")
+    print(f"\n  Viz: {FIG_DIR / 'sprint8_10_selection.png'}")
 
 
 if __name__ == "__main__":
