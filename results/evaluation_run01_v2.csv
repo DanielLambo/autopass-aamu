@@ -1,0 +1,2 @@
+feature_id,description,detected_cm,clear_width_cm,signed_err_clear,abs_err_clear,rel_err_clear,rough_width_cm,signed_err_rough,abs_err_rough,rel_err_rough,source_wall,confidence
+door_01,"bedroom doorway, door fully open during run, jamb-face to jamb-face at floor level",74.2,85.3,-11.1,11.1,13.01,91.4,-17.2,17.2,18.82,wall_02+wall_04,0.89

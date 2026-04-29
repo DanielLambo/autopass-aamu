@@ -1,4 +1,4 @@
-feature_id, width_cm, description
-door_01, 91.4, bedroom door width, frame to frame at floor level
-passage_01, 118.9, gap between door and wall
-passage_02, 97.5, gap between bed and wall
+# feature_id, clear_width_cm, rough_width_cm, description
+door_01, 85.3, 91.4, bedroom doorway, door fully open during run, jamb-face to jamb-face at floor level
+passage_01, , , furniture gap (out of scope for wall-plane pipeline)
+passage_02, , , furniture gap (out of scope for wall-plane pipeline)

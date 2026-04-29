@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Sprint 8: Evaluation harness — compare detected doorways to ground truth.
+"""Sprint 8.6: Dual-reference evaluation harness.
 
-Computes per-feature absolute/signed/relative errors and aggregate MAE,
-RMSE, max error, and detection rate.  Accepts --match flags to map
-detections (by source_wall) to ground truth feature IDs.
+Compares detected doorway widths against two ground-truth references:
+  - clear_width (primary) — jamb-face to jamb-face, door open. This is
+    the passable opening and aligns with ADA Standards for Accessible
+    Design §404.2.3, which defines minimum clear width as measured
+    between the face of the door and the stop on the latch side.
+  - rough_width (secondary) — jamb-trim to jamb-trim (framed opening).
 
 Usage:
     python scripts/evaluate.py --match wall_02+wall_04:door_01
     python scripts/evaluate.py --detections data/doorways_v4.json \
-        --output evaluation_run01_refined --match wall_02+wall_04:door_01
+        --output evaluation_run01_v2 --match wall_02+wall_04:door_01
 """
 from __future__ import annotations
 
@@ -21,10 +24,9 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DETECTIONS = ROOT / "data" / "doorways_v3.json"
+DEFAULT_DETECTIONS = ROOT / "data" / "doorways_v4.json"
 GROUND_TRUTH = ROOT / "ground_truth.txt"
 RESULTS_DIR = ROOT / "results"
 
@@ -34,12 +36,15 @@ def load_ground_truth():
     with open(GROUND_TRUTH) as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith("feature_id"):
+            if not line or line.startswith("#"):
                 continue
-            parts = [p.strip() for p in line.split(",", 2)]
-            fid, width_cm, desc = parts[0], float(parts[1]), parts[2]
-            entries[fid] = {"feature_id": fid, "width_cm": width_cm,
-                            "description": desc}
+            parts = [p.strip() for p in line.split(",", 3)]
+            fid = parts[0]
+            clear = float(parts[1]) if parts[1] else None
+            rough = float(parts[2]) if parts[2] else None
+            desc = parts[3] if len(parts) > 3 else ""
+            entries[fid] = dict(feature_id=fid, clear_width_cm=clear,
+                                rough_width_cm=rough, description=desc)
     return entries
 
 
@@ -49,16 +54,24 @@ def load_detections(path):
 
 
 def build_matches(detections, match_args):
-    """Return list of (detection, feature_id) from --match wall:fid args."""
     det_by_wall = {d["source_wall"]: d for d in detections}
     matches = []
     for m in match_args:
         wall, fid = m.split(":")
-        if wall not in det_by_wall:
+        if wall in det_by_wall:
+            matches.append((det_by_wall[wall], fid))
+        else:
             print(f"  WARNING: no detection for wall '{wall}', skipping")
-            continue
-        matches.append((det_by_wall[wall], fid))
     return matches
+
+
+def _err(detected, truth):
+    if truth is None:
+        return None, None, None
+    signed = round(detected - truth, 2)
+    absolute = round(abs(signed), 2)
+    relative = round(absolute / truth * 100, 2)
+    return signed, absolute, relative
 
 
 def compute_errors(matches, gt):
@@ -67,129 +80,141 @@ def compute_errors(matches, gt):
         if fid not in gt:
             print(f"  WARNING: '{fid}' not in ground truth, skipping")
             continue
-        detected_cm = det.get("width_m_refined", det["width_m"]) * 100
-        truth_cm = gt[fid]["width_cm"]
-        abs_err = abs(detected_cm - truth_cm)
-        signed_err = detected_cm - truth_cm
-        rel_err = abs_err / truth_cm * 100
-        rows.append({
-            "feature_id": fid,
-            "description": gt[fid]["description"],
-            "ground_truth_cm": truth_cm,
-            "detected_cm": round(detected_cm, 1),
-            "absolute_error_cm": round(abs_err, 2),
-            "signed_error_cm": round(signed_err, 2),
-            "relative_error_pct": round(rel_err, 2),
-            "source_wall": det["source_wall"],
-            "confidence": det["confidence"],
-        })
+        g = gt[fid]
+        detected_cm = round(det.get("width_m_refined", det["width_m"]) * 100, 1)
+        sc, ac, rc = _err(detected_cm, g["clear_width_cm"])
+        sr, ar, rr = _err(detected_cm, g["rough_width_cm"])
+        rows.append(dict(
+            feature_id=fid, description=g["description"],
+            detected_cm=detected_cm,
+            clear_width_cm=g["clear_width_cm"],
+            signed_err_clear=sc, abs_err_clear=ac, rel_err_clear=rc,
+            rough_width_cm=g["rough_width_cm"],
+            signed_err_rough=sr, abs_err_rough=ar, rel_err_rough=rr,
+            source_wall=det["source_wall"], confidence=det["confidence"],
+        ))
     return rows
 
 
-def aggregate(rows, n_gt):
-    if not rows:
-        return {"MAE_cm": None, "RMSE_cm": None, "max_error_cm": None,
-                "detection_rate": 0.0, "n_matched": 0, "n_ground_truth": n_gt}
-    errs = [r["absolute_error_cm"] for r in rows]
-    return {
-        "MAE_cm": round(sum(errs) / len(errs), 2),
-        "RMSE_cm": round(math.sqrt(sum(e ** 2 for e in errs) / len(errs)), 2),
-        "max_error_cm": round(max(errs), 2),
-        "detection_rate": round(len(rows) / n_gt, 2) if n_gt else 0.0,
-        "n_matched": len(rows),
-        "n_ground_truth": n_gt,
-    }
+def _agg(rows, key, n):
+    vals = [r[key] for r in rows if r[key] is not None]
+    if not vals:
+        return None, None, None, 0.0
+    mae = round(sum(vals) / len(vals), 2)
+    rmse = round(math.sqrt(sum(v ** 2 for v in vals) / len(vals)), 2)
+    mx = round(max(vals), 2)
+    rate = round(len(vals) / n, 2) if n else 0.0
+    return mae, rmse, mx, rate
 
 
-def save_results(rows, agg, output_name="evaluation_run01"):
+def aggregate(rows, gt):
+    n_total = len(gt)
+    n_in_scope = sum(1 for g in gt.values() if g["clear_width_cm"] is not None)
+    mae_c, rmse_c, max_c, _ = _agg(rows, "abs_err_clear", n_in_scope)
+    mae_r, rmse_r, max_r, _ = _agg(rows, "abs_err_rough", n_total)
+    n_matched = sum(1 for r in rows if r["abs_err_clear"] is not None)
+    return dict(
+        MAE_vs_clear_cm=mae_c, RMSE_vs_clear_cm=rmse_c,
+        max_error_vs_clear_cm=max_c,
+        MAE_vs_rough_cm=mae_r, RMSE_vs_rough_cm=rmse_r,
+        max_error_vs_rough_cm=max_r,
+        in_scope_detection_rate=round(n_matched / n_in_scope, 2) if n_in_scope else 0.0,
+        overall_detection_rate=round(n_matched / n_total, 2) if n_total else 0.0,
+        n_matched=n_matched, n_in_scope=n_in_scope, n_total=n_total,
+        primary_reference="clear_width (ADA §404.2.3)",
+    )
+
+
+def save_results(rows, agg, name):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = RESULTS_DIR / f"{output_name}.json"
-    csv_path = RESULTS_DIR / f"{output_name}.csv"
-
-    with open(json_path, "w") as f:
+    jp = RESULTS_DIR / f"{name}.json"
+    cp = RESULTS_DIR / f"{name}.csv"
+    with open(jp, "w") as f:
         json.dump({"per_feature": rows, "aggregate": agg}, f, indent=2)
-    print(f"  JSON: {json_path}")
-
-    with open(csv_path, "w", newline="") as f:
+    with open(cp, "w", newline="") as f:
         if rows:
-            w = csv.DictWriter(f, fieldnames=rows[0].keys())
-            w.writeheader()
-            w.writerows(rows)
-    print(f"  CSV:  {csv_path}")
+            csv.DictWriter(f, fieldnames=rows[0].keys()).writeheader()
+            csv.DictWriter(f, fieldnames=rows[0].keys()).writerows(rows)
+    print(f"  JSON: {jp}\n  CSV:  {cp}")
 
 
-def plot_errors(rows, agg, output_name="evaluation_run01"):
-    fig_path = ROOT / "figures" / f"{output_name}.png"
-    fig_path.parent.mkdir(parents=True, exist_ok=True)
+def plot_errors(rows, agg, name):
+    fp = ROOT / "figures" / f"{name}.png"
+    fp.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 5))
-    if not rows:
+    matched = [r for r in rows if r["signed_err_clear"] is not None]
+    if not matched:
         ax.text(0.5, 0.5, "No matched detections", ha="center", va="center",
                 transform=ax.transAxes, fontsize=14)
-        plt.savefig(str(fig_path), dpi=150, facecolor="white")
-        plt.close()
-        return
+        plt.savefig(str(fp), dpi=150, facecolor="white"); plt.close(); return
 
-    labels = [r["feature_id"] for r in rows]
-    signed = [r["signed_error_cm"] for r in rows]
-    colors = ["#2ca02c" if s >= 0 else "#d62728" for s in signed]
+    import numpy as np
+    labels = [r["feature_id"] for r in matched]
+    x = np.arange(len(labels))
+    w = 0.35
+    sc = [r["signed_err_clear"] for r in matched]
+    sr = [r["signed_err_rough"] for r in matched]
 
-    bars = ax.bar(labels, signed, color=colors, edgecolor="black", width=0.5)
-    ax.axhline(0, color="black", linewidth=0.8)
-    for bar, val in zip(bars, signed):
-        ax.text(bar.get_x() + bar.get_width() / 2, val,
-                f"{val:+.1f}", ha="center",
-                va="bottom" if val >= 0 else "top", fontsize=10,
-                fontweight="bold")
+    b1 = ax.bar(x - w / 2, sc, w, label="vs clear", color="#1f77b4", edgecolor="black")
+    b2 = ax.bar(x + w / 2, sr, w, label="vs rough", color="#ff7f0e", edgecolor="black")
+    ax.axhline(0, color="black", lw=0.8)
+    for bar, val in list(zip(b1, sc)) + list(zip(b2, sr)):
+        if val is not None:
+            ax.text(bar.get_x() + bar.get_width() / 2, val, f"{val:+.1f}",
+                    ha="center", va="bottom" if val >= 0 else "top",
+                    fontsize=9, fontweight="bold")
 
-    mae = agg["MAE_cm"]
-    ax.text(0.98, 0.95, f"MAE = {mae:.2f} cm\nRMSE = {agg['RMSE_cm']:.2f} cm",
-            transform=ax.transAxes, ha="right", va="top", fontsize=11,
-            bbox=dict(boxstyle="round,pad=0.3", fc="lightyellow", ec="gray"))
-
+    info = (f"MAE vs clear = {agg['MAE_vs_clear_cm']:.2f} cm\n"
+            f"MAE vs rough = {agg['MAE_vs_rough_cm']:.2f} cm")
+    ax.text(0.98, 0.95, info, transform=ax.transAxes, ha="right", va="top",
+            fontsize=10, bbox=dict(boxstyle="round,pad=0.3", fc="lightyellow", ec="gray"))
+    ax.set_xticks(x); ax.set_xticklabels(labels)
     ax.set_ylabel("Signed Error (cm)")
-    ax.set_title(f"Sprint 8: Detection Error vs Ground Truth "
-                 f"({agg['n_matched']}/{agg['n_ground_truth']} matched)")
-    ax.grid(True, axis="y", alpha=0.3)
+    ax.set_title(f"Sprint 8.6: Dual-Reference Evaluation "
+                 f"({agg['n_matched']}/{agg['n_in_scope']} in-scope matched)")
+    ax.legend(); ax.grid(True, axis="y", alpha=0.3)
     plt.tight_layout()
-    plt.savefig(str(fig_path), dpi=150, facecolor="white")
-    plt.close()
-    print(f"  Plot: {fig_path}")
+    plt.savefig(str(fp), dpi=150, facecolor="white"); plt.close()
+    print(f"  Plot: {fp}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate doorway detections")
     parser.add_argument("--match", nargs="+", default=[],
-                        help="wall:feature_id mappings (e.g. wall_02+wall_04:door_01)")
-    parser.add_argument("--detections", default=str(DEFAULT_DETECTIONS),
-                        help="Path to detections JSON")
-    parser.add_argument("--output", default="evaluation_run01",
-                        help="Base name for output files")
+                        help="wall:feature_id mappings")
+    parser.add_argument("--detections", default=str(DEFAULT_DETECTIONS))
+    parser.add_argument("--output", default="evaluation_run01_v2")
     args = parser.parse_args()
 
     gt = load_ground_truth()
-    det_path = Path(args.detections)
-    if not det_path.is_absolute():
-        det_path = ROOT / det_path
-    detections = load_detections(det_path)
-    print(f"Ground truth:  {len(gt)} features")
-    print(f"Detections:    {len(detections)} doorways ({det_path.name})\n")
+    dp = Path(args.detections)
+    if not dp.is_absolute():
+        dp = ROOT / dp
+    dets = load_detections(dp)
+    n_scope = sum(1 for g in gt.values() if g["clear_width_cm"] is not None)
+    print(f"Ground truth:  {len(gt)} features ({n_scope} in scope)")
+    print(f"Detections:    {len(dets)} doorways ({dp.name})\n")
 
-    matches = build_matches(detections, args.match)
+    matches = build_matches(dets, args.match)
     rows = compute_errors(matches, gt)
-    agg = aggregate(rows, len(gt))
+    agg = aggregate(rows, gt)
 
-    # Console summary
-    print(f"{'Feature':>14}  {'GT cm':>6}  {'Det cm':>6}  "
-          f"{'Err cm':>7}  {'Rel %':>6}  {'Conf':>5}")
-    print("-" * 60)
+    hdr = (f"{'Feature':>12}  {'Det':>6}  {'Clear':>6}  {'Err/C':>7}  "
+           f"{'Rough':>6}  {'Err/R':>7}  {'Conf':>5}")
+    print(hdr)
+    print("-" * len(hdr))
     for r in rows:
-        print(f"{r['feature_id']:>14}  {r['ground_truth_cm']:6.1f}  "
-              f"{r['detected_cm']:6.1f}  {r['signed_error_cm']:+7.2f}  "
-              f"{r['relative_error_pct']:5.1f}%  {r['confidence']:5.2f}")
-    print("-" * 60)
-    print(f"{'MAE':>14}  {agg['MAE_cm']:6.2f} cm   "
-          f"RMSE {agg['RMSE_cm']:.2f} cm   "
-          f"detect rate {agg['detection_rate']:.0%}")
+        c = f"{r['clear_width_cm']:.1f}" if r['clear_width_cm'] else "  -"
+        ec = f"{r['signed_err_clear']:+.1f}" if r['signed_err_clear'] is not None else "  -"
+        ru = f"{r['rough_width_cm']:.1f}" if r['rough_width_cm'] else "  -"
+        er = f"{r['signed_err_rough']:+.1f}" if r['signed_err_rough'] is not None else "  -"
+        print(f"{r['feature_id']:>12}  {r['detected_cm']:6.1f}  {c:>6}  "
+              f"{ec:>7}  {ru:>6}  {er:>7}  {r['confidence']:5.2f}")
+    print("-" * len(hdr))
+    mc = agg['MAE_vs_clear_cm']; mr = agg['MAE_vs_rough_cm']
+    print(f"  MAE vs clear: {mc:.2f} cm | MAE vs rough: {mr:.2f} cm")
+    print(f"  In-scope detect rate: {agg['in_scope_detection_rate']:.0%} "
+          f"| Overall: {agg['overall_detection_rate']:.0%}")
 
     save_results(rows, agg, args.output)
     plot_errors(rows, agg, args.output)

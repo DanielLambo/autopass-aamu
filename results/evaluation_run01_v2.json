@@ -1,0 +1,33 @@
+{
+  "per_feature": [
+    {
+      "feature_id": "door_01",
+      "description": "bedroom doorway, door fully open during run, jamb-face to jamb-face at floor level",
+      "detected_cm": 74.2,
+      "clear_width_cm": 85.3,
+      "signed_err_clear": -11.1,
+      "abs_err_clear": 11.1,
+      "rel_err_clear": 13.01,
+      "rough_width_cm": 91.4,
+      "signed_err_rough": -17.2,
+      "abs_err_rough": 17.2,
+      "rel_err_rough": 18.82,
+      "source_wall": "wall_02+wall_04",
+      "confidence": 0.89
+    }
+  ],
+  "aggregate": {
+    "MAE_vs_clear_cm": 11.1,
+    "RMSE_vs_clear_cm": 11.1,
+    "max_error_vs_clear_cm": 11.1,
+    "MAE_vs_rough_cm": 17.2,
+    "RMSE_vs_rough_cm": 17.2,
+    "max_error_vs_rough_cm": 17.2,
+    "in_scope_detection_rate": 1.0,
+    "overall_detection_rate": 0.33,
+    "n_matched": 1,
+    "n_in_scope": 1,
+    "n_total": 3,
+    "primary_reference": "clear_width (ADA \u00a7404.2.3)"
+  }
+}
