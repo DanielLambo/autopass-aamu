@@ -1,0 +1,28 @@
+[
+  {
+    "source_wall": "wall_02+wall_04",
+    "merged_from": [
+      "wall_02",
+      "wall_04"
+    ],
+    "gap_start_xy": [
+      0.704,
+      -0.023
+    ],
+    "gap_end_xy": [
+      1.152,
+      0.568
+    ],
+    "gap_center_xy": [
+      0.928,
+      0.273
+    ],
+    "width_m": 0.7415,
+    "width_m_binned": 0.8,
+    "width_m_refined": 0.7415,
+    "refinement_delta_cm": -5.85,
+    "flanking_density_left": 10.0,
+    "flanking_density_right": 8.0,
+    "confidence": 0.89
+  }
+]

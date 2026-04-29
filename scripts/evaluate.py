@@ -7,6 +7,8 @@ detections (by source_wall) to ground truth feature IDs.
 
 Usage:
     python scripts/evaluate.py --match wall_02+wall_04:door_01
+    python scripts/evaluate.py --detections data/doorways_v4.json \
+        --output evaluation_run01_refined --match wall_02+wall_04:door_01
 """
 from __future__ import annotations
 
@@ -22,10 +24,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-DETECTIONS = ROOT / "data" / "doorways_v3.json"
+DEFAULT_DETECTIONS = ROOT / "data" / "doorways_v3.json"
 GROUND_TRUTH = ROOT / "ground_truth.txt"
 RESULTS_DIR = ROOT / "results"
-FIG_PATH = ROOT / "figures" / "sprint8_errors.png"
 
 
 def load_ground_truth():
@@ -42,8 +43,8 @@ def load_ground_truth():
     return entries
 
 
-def load_detections():
-    with open(DETECTIONS) as f:
+def load_detections(path):
+    with open(path) as f:
         return json.load(f)
 
 
@@ -66,7 +67,7 @@ def compute_errors(matches, gt):
         if fid not in gt:
             print(f"  WARNING: '{fid}' not in ground truth, skipping")
             continue
-        detected_cm = det["width_m"] * 100
+        detected_cm = det.get("width_m_refined", det["width_m"]) * 100
         truth_cm = gt[fid]["width_cm"]
         abs_err = abs(detected_cm - truth_cm)
         signed_err = detected_cm - truth_cm
@@ -100,10 +101,10 @@ def aggregate(rows, n_gt):
     }
 
 
-def save_results(rows, agg):
+def save_results(rows, agg, output_name="evaluation_run01"):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = RESULTS_DIR / "evaluation_run01.json"
-    csv_path = RESULTS_DIR / "evaluation_run01.csv"
+    json_path = RESULTS_DIR / f"{output_name}.json"
+    csv_path = RESULTS_DIR / f"{output_name}.csv"
 
     with open(json_path, "w") as f:
         json.dump({"per_feature": rows, "aggregate": agg}, f, indent=2)
@@ -117,13 +118,14 @@ def save_results(rows, agg):
     print(f"  CSV:  {csv_path}")
 
 
-def plot_errors(rows, agg):
-    FIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+def plot_errors(rows, agg, output_name="evaluation_run01"):
+    fig_path = ROOT / "figures" / f"{output_name}.png"
+    fig_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 5))
     if not rows:
         ax.text(0.5, 0.5, "No matched detections", ha="center", va="center",
                 transform=ax.transAxes, fontsize=14)
-        plt.savefig(str(FIG_PATH), dpi=150, facecolor="white")
+        plt.savefig(str(fig_path), dpi=150, facecolor="white")
         plt.close()
         return
 
@@ -149,21 +151,28 @@ def plot_errors(rows, agg):
                  f"({agg['n_matched']}/{agg['n_ground_truth']} matched)")
     ax.grid(True, axis="y", alpha=0.3)
     plt.tight_layout()
-    plt.savefig(str(FIG_PATH), dpi=150, facecolor="white")
+    plt.savefig(str(fig_path), dpi=150, facecolor="white")
     plt.close()
-    print(f"  Plot: {FIG_PATH}")
+    print(f"  Plot: {fig_path}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate doorway detections")
     parser.add_argument("--match", nargs="+", default=[],
                         help="wall:feature_id mappings (e.g. wall_02+wall_04:door_01)")
+    parser.add_argument("--detections", default=str(DEFAULT_DETECTIONS),
+                        help="Path to detections JSON")
+    parser.add_argument("--output", default="evaluation_run01",
+                        help="Base name for output files")
     args = parser.parse_args()
 
     gt = load_ground_truth()
-    detections = load_detections()
-    print(f"Ground truth: {len(gt)} features")
-    print(f"Detections:   {len(detections)} doorways\n")
+    det_path = Path(args.detections)
+    if not det_path.is_absolute():
+        det_path = ROOT / det_path
+    detections = load_detections(det_path)
+    print(f"Ground truth:  {len(gt)} features")
+    print(f"Detections:    {len(detections)} doorways ({det_path.name})\n")
 
     matches = build_matches(detections, args.match)
     rows = compute_errors(matches, gt)
@@ -182,8 +191,8 @@ def main():
           f"RMSE {agg['RMSE_cm']:.2f} cm   "
           f"detect rate {agg['detection_rate']:.0%}")
 
-    save_results(rows, agg)
-    plot_errors(rows, agg)
+    save_results(rows, agg, args.output)
+    plot_errors(rows, agg, args.output)
 
 
 if __name__ == "__main__":
