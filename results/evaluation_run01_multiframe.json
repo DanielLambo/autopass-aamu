@@ -1,0 +1,21 @@
+{
+  "per_feature": [
+    {
+      "feature_id": "door_01",
+      "detected_cm": 106.99,
+      "clear_width_cm": 85.3,
+      "signed_err_clear": 21.69,
+      "abs_err_clear": 21.69,
+      "rel_err_clear": 25.43,
+      "rough_width_cm": 91.4,
+      "signed_err_rough": 15.59,
+      "abs_err_rough": 15.59,
+      "method": "multi_frame_mean"
+    }
+  ],
+  "aggregate": {
+    "MAE_vs_clear_cm": 21.69,
+    "MAE_vs_rough_cm": 15.59,
+    "n_frames": 28
+  }
+}
