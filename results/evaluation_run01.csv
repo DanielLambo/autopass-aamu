@@ -1,0 +1,2 @@
+feature_id,description,ground_truth_cm,detected_cm,absolute_error_cm,signed_error_cm,relative_error_pct,source_wall,confidence
+door_01,"bedroom door width, frame to frame at floor level",91.4,80.0,11.4,-11.4,12.47,wall_02+wall_04,0.89

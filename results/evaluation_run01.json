@@ -1,0 +1,23 @@
+{
+  "per_feature": [
+    {
+      "feature_id": "door_01",
+      "description": "bedroom door width, frame to frame at floor level",
+      "ground_truth_cm": 91.4,
+      "detected_cm": 80.0,
+      "absolute_error_cm": 11.4,
+      "signed_error_cm": -11.4,
+      "relative_error_pct": 12.47,
+      "source_wall": "wall_02+wall_04",
+      "confidence": 0.89
+    }
+  ],
+  "aggregate": {
+    "MAE_cm": 11.4,
+    "RMSE_cm": 11.4,
+    "max_error_cm": 11.4,
+    "detection_rate": 0.33,
+    "n_matched": 1,
+    "n_ground_truth": 3
+  }
+}
