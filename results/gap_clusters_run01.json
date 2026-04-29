@@ -1,0 +1,282 @@
+{
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "center_xy": [
+        0.078,
+        -1.134
+      ],
+      "frame_count": 15,
+      "frames": [
+        20,
+        21,
+        23,
+        24,
+        26,
+        27,
+        29,
+        31,
+        34,
+        37,
+        39,
+        41,
+        44,
+        45,
+        49
+      ],
+      "widths_cm": [
+        112.68,
+        89.99,
+        67.94,
+        60.32,
+        99.05,
+        91.22,
+        79.97,
+        88.37,
+        114.01,
+        102.43,
+        82.29,
+        67.12,
+        84.11,
+        70.18,
+        57.19,
+        119.96
+      ],
+      "mean_width_cm": 86.68,
+      "median_width_cm": 86.24,
+      "std_width_cm": 18.72,
+      "mean_confidence": 0.726,
+      "score": 10.89
+    },
+    {
+      "cluster_id": 1,
+      "center_xy": [
+        0.828,
+        0.516
+      ],
+      "frame_count": 29,
+      "frames": [
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49
+      ],
+      "widths_cm": [
+        131.49,
+        104.99,
+        97.84,
+        135.88,
+        164.47,
+        94.62,
+        98.23,
+        127.48,
+        100.11,
+        83.1,
+        91.23,
+        150.35,
+        101.12,
+        82.01,
+        89.02,
+        115.73,
+        88.29,
+        94.74,
+        93.88,
+        139.09,
+        137.36,
+        82.0,
+        104.97,
+        137.02,
+        155.66,
+        158.03,
+        156.62,
+        89.43,
+        97.02,
+        159.45,
+        120.06,
+        133.95,
+        60.04,
+        133.99,
+        95.49
+      ],
+      "mean_width_cm": 114.42,
+      "median_width_cm": 104.97,
+      "std_width_cm": 27.29,
+      "mean_confidence": 0.707,
+      "score": 20.51
+    },
+    {
+      "cluster_id": 2,
+      "center_xy": [
+        0.085,
+        0.242
+      ],
+      "frame_count": 3,
+      "frames": [
+        26,
+        38,
+        40
+      ],
+      "widths_cm": [
+        187.6,
+        172.58,
+        178.88
+      ],
+      "mean_width_cm": 179.69,
+      "median_width_cm": 178.88,
+      "std_width_cm": 6.16,
+      "mean_confidence": 0.643,
+      "score": 1.93
+    },
+    {
+      "cluster_id": 3,
+      "center_xy": [
+        -0.449,
+        -2.034
+      ],
+      "frame_count": 4,
+      "frames": [
+        27,
+        39,
+        41,
+        48
+      ],
+      "widths_cm": [
+        158.74,
+        60.1,
+        89.6,
+        133.99
+      ],
+      "mean_width_cm": 110.61,
+      "median_width_cm": 111.8,
+      "std_width_cm": 38.26,
+      "mean_confidence": 0.692,
+      "score": 2.77
+    },
+    {
+      "cluster_id": 4,
+      "center_xy": [
+        1.244,
+        -1.265
+      ],
+      "frame_count": 4,
+      "frames": [
+        29,
+        30,
+        35,
+        40
+      ],
+      "widths_cm": [
+        60.8,
+        60.0,
+        57.43,
+        64.76
+      ],
+      "mean_width_cm": 60.75,
+      "median_width_cm": 60.4,
+      "std_width_cm": 2.63,
+      "mean_confidence": 0.42,
+      "score": 1.68
+    },
+    {
+      "cluster_id": 5,
+      "center_xy": [
+        -0.971,
+        -2.241
+      ],
+      "frame_count": 6,
+      "frames": [
+        29,
+        31,
+        39,
+        44,
+        45,
+        49
+      ],
+      "widths_cm": [
+        61.98,
+        89.01,
+        65.7,
+        98.97,
+        62.87,
+        80.92
+      ],
+      "mean_width_cm": 76.58,
+      "median_width_cm": 73.31,
+      "std_width_cm": 14.11,
+      "mean_confidence": 0.785,
+      "score": 4.71
+    },
+    {
+      "cluster_id": 6,
+      "center_xy": [
+        0.417,
+        -1.701
+      ],
+      "frame_count": 3,
+      "frames": [
+        30,
+        34,
+        39
+      ],
+      "widths_cm": [
+        185.94,
+        169.69,
+        60.11
+      ],
+      "mean_width_cm": 138.58,
+      "median_width_cm": 169.69,
+      "std_width_cm": 55.88,
+      "mean_confidence": 0.706,
+      "score": 2.12
+    },
+    {
+      "cluster_id": 7,
+      "center_xy": [
+        1.282,
+        -0.857
+      ],
+      "frame_count": 3,
+      "frames": [
+        34,
+        36,
+        43
+      ],
+      "widths_cm": [
+        147.14,
+        151.18,
+        147.12
+      ],
+      "mean_width_cm": 148.48,
+      "median_width_cm": 147.14,
+      "std_width_cm": 1.91,
+      "mean_confidence": 0.549,
+      "score": 1.65
+    }
+  ],
+  "all_gaps": 77
+}
