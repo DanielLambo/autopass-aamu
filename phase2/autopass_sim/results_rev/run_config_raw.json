@@ -1,0 +1,14 @@
+{
+ "worlds": 300,
+ "rrt_worlds": 0,
+ "layouts": "room,corridor",
+ "sensor": "raw",
+ "floor": 1.0,
+ "calib": "calib.json",
+ "rho_calib": "calib_rho.json",
+ "procs": 2,
+ "out": "results_rev",
+ "seed0": 1000,
+ "methods": "B2,P-A*(4),B2-nr,P-A*(4)-nr,B2-b4,P-A*(4)-b4,B1-rhohat",
+ "tag": "_scen"
+}

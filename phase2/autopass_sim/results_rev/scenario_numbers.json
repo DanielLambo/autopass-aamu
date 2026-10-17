@@ -1,0 +1,247 @@
+{
+ "methods": {
+  "B1-rhohat": {
+   "unsafe": 9,
+   "success": 590,
+   "no_route": 1,
+   "flag": 0.107,
+   "ndec": 845,
+   "time": 24.27,
+   "repos": 0.0,
+   "repos_any": 0,
+   "dwell": 2.28,
+   "tfd": 8.88,
+   "by": {
+    "corridor": {
+     "success": 300,
+     "time": 26.28
+    },
+    "room": {
+     "success": 290,
+     "time": 22.25
+    }
+   }
+  },
+  "B2": {
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "flag": 0.143,
+   "ndec": 897,
+   "time": 26.93,
+   "repos": 1.247,
+   "repos_any": 500,
+   "dwell": 2.8,
+   "tfd": 10.23,
+   "by": {
+    "corridor": {
+     "success": 300,
+     "time": 28.06
+    },
+    "room": {
+     "success": 298,
+     "time": 25.8
+    }
+   }
+  },
+  "B2-b4": {
+   "unsafe": 0,
+   "success": 126,
+   "no_route": 474,
+   "flag": 0.88,
+   "ndec": 1353,
+   "time": 22.84,
+   "repos": 0.0,
+   "repos_any": 0,
+   "dwell": 3.98,
+   "tfd": 8.7,
+   "by": {
+    "corridor": {
+     "success": 1,
+     "time": 23.42
+    },
+    "room": {
+     "success": 125,
+     "time": 22.26
+    }
+   }
+  },
+  "B2-nr": {
+   "unsafe": 0,
+   "success": 129,
+   "no_route": 471,
+   "flag": 0.872,
+   "ndec": 1347,
+   "time": 38.51,
+   "repos": 0.0,
+   "repos_any": 0,
+   "dwell": 19.68,
+   "tfd": 14.86,
+   "by": {
+    "corridor": {
+     "success": 1,
+     "time": 43.5
+    },
+    "room": {
+     "success": 128,
+     "time": 33.51
+    }
+   }
+  },
+  "P-A*(4)": {
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "flag": 0.141,
+   "ndec": 885,
+   "time": 28.09,
+   "repos": 0.39,
+   "repos_any": 209,
+   "dwell": 2.52,
+   "tfd": 10.39,
+   "by": {
+    "corridor": {
+     "success": 300,
+     "time": 28.62
+    },
+    "room": {
+     "success": 298,
+     "time": 27.56
+    }
+   }
+  },
+  "P-A*(4)-b4": {
+   "unsafe": 0,
+   "success": 590,
+   "no_route": 10,
+   "flag": 0.224,
+   "ndec": 932,
+   "time": 26.95,
+   "repos": 0.0,
+   "repos_any": 0,
+   "dwell": 0.77,
+   "tfd": 8.79,
+   "by": {
+    "corridor": {
+     "success": 297,
+     "time": 27.78
+    },
+    "room": {
+     "success": 293,
+     "time": 26.12
+    }
+   }
+  },
+  "P-A*(4)-nr": {
+   "unsafe": 0,
+   "success": 590,
+   "no_route": 10,
+   "flag": 0.185,
+   "ndec": 913,
+   "time": 29.03,
+   "repos": 0.0,
+   "repos_any": 0,
+   "dwell": 3.23,
+   "tfd": 10.78,
+   "by": {
+    "corridor": {
+     "success": 297,
+     "time": 30.14
+    },
+    "room": {
+     "success": 293,
+     "time": 27.91
+    }
+   }
+  }
+ },
+ "compare": {
+  "B2->P-A*(4)": {
+   "success": [
+    598,
+    598
+   ],
+   "a_only": 0,
+   "b_only": 0,
+   "p": 1.0,
+   "dtime": [
+    1.17,
+    0.66,
+    1.67
+   ],
+   "drepos": [
+    -0.86,
+    -0.91,
+    -0.8
+   ],
+   "ddwell": [
+    -0.28,
+    -0.5,
+    -0.06
+   ],
+   "dtfd": [
+    0.16,
+    -0.09,
+    0.41
+   ]
+  },
+  "B2-nr->P-A*(4)-nr": {
+   "success": [
+    129,
+    590
+   ],
+   "a_only": 0,
+   "b_only": 461,
+   "p": 3.3589380537835444e-139,
+   "dtime": [
+    -9.48,
+    -10.57,
+    -8.39
+   ],
+   "drepos": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "ddwell": [
+    -16.45,
+    -17.24,
+    -15.65
+   ],
+   "dtfd": [
+    -4.08,
+    -4.49,
+    -3.67
+   ]
+  },
+  "B2-b4->P-A*(4)-b4": {
+   "success": [
+    126,
+    590
+   ],
+   "a_only": 0,
+   "b_only": 464,
+   "p": 4.1986725672294305e-140,
+   "dtime": [
+    4.11,
+    3.33,
+    4.89
+   ],
+   "drepos": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "ddwell": [
+    -3.21,
+    -3.37,
+    -3.06
+   ],
+   "dtfd": [
+    0.1,
+    -0.07,
+    0.26
+   ]
+  }
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "worlds": 60,
+ "rrt_worlds": 0,
+ "layouts": "room,corridor",
+ "sensor": "voxelmap",
+ "floor": 1.0,
+ "calib": "calib.json",
+ "rho_calib": "calib_rho.json",
+ "procs": 2,
+ "out": "results_rev",
+ "seed0": 1000
+}

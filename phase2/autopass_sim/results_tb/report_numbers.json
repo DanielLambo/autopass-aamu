@@ -1,0 +1,315 @@
+{
+ "counts": {
+  "B1": {
+   "n": 600,
+   "unsafe": 41,
+   "success": 559,
+   "no_route": 0,
+   "unsafe_by_layout": {
+    "corridor": 24,
+    "room": 17
+   }
+  },
+  "B2": {
+   "n": 600,
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  },
+  "P-A*(1)": {
+   "n": 600,
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  },
+  "P-A*(2)": {
+   "n": 600,
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  },
+  "P-A*(4)": {
+   "n": 600,
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  },
+  "P-A*(4)n": {
+   "n": 600,
+   "unsafe": 14,
+   "success": 586,
+   "no_route": 0,
+   "unsafe_by_layout": {
+    "corridor": 9,
+    "room": 5
+   }
+  },
+  "P-A*(8)": {
+   "n": 600,
+   "unsafe": 0,
+   "success": 598,
+   "no_route": 2,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  },
+  "P-RRT*(4)": {
+   "n": 200,
+   "unsafe": 0,
+   "success": 199,
+   "no_route": 1,
+   "unsafe_by_layout": {
+    "corridor": 0,
+    "room": 0
+   }
+  }
+ },
+ "compare": {
+  "B1->P-A*(4)n": {
+   "a_only": 28,
+   "b_only": 1,
+   "p": 1.1175870895385742e-07,
+   "unsafe": [
+    41,
+    14
+   ],
+   "dtime": [
+    3.29,
+    2.81,
+    3.77
+   ]
+  },
+  "B1->B2": {
+   "a_only": 41,
+   "b_only": 0,
+   "p": 9.094947017729282e-13,
+   "unsafe": [
+    41,
+    0
+   ],
+   "dtime": [
+    4.92,
+    4.18,
+    5.67
+   ]
+  },
+  "B2->P-A*(4)": {
+   "a_only": 0,
+   "b_only": 0,
+   "p": 1.0,
+   "unsafe": [
+    0,
+    0
+   ],
+   "dtime": [
+    1.25,
+    0.74,
+    1.77
+   ]
+  }
+ },
+ "by_layout": {
+  "B1->P-A*(4)n": {
+   "corridor": [
+    3.08,
+    2.57,
+    3.58
+   ],
+   "room": [
+    3.51,
+    2.69,
+    4.33
+   ]
+  },
+  "B1->B2": {
+   "corridor": [
+    5.37,
+    4.37,
+    6.38
+   ],
+   "room": [
+    4.47,
+    3.37,
+    5.58
+   ]
+  },
+  "B2->P-A*(4)": {
+   "corridor": [
+    0.77,
+    0.55,
+    1.0
+   ],
+   "room": [
+    1.74,
+    0.74,
+    2.74
+   ]
+  },
+  "B1_time": {
+   "corridor": 22.6,
+   "room": 21.3
+  },
+  "B2_time": {
+   "corridor": 28.0,
+   "room": 25.8
+  },
+  "P-A*(4)_time": {
+   "corridor": 28.8,
+   "room": 27.5
+  },
+  "P-A*(4)n_time": {
+   "corridor": 25.7,
+   "room": 24.8
+  }
+ },
+ "failures": {
+  "B2": [
+   {
+    "layout": "room",
+    "world": 1053,
+    "outcome": "no_route",
+    "decisions": "[[1, 9.97, \"FLAG\", null, 0.0], [0, -0.13, \"FLAG\", -0.17, 20.057]]"
+   },
+   {
+    "layout": "room",
+    "world": 1271,
+    "outcome": "no_route",
+    "decisions": "[[1, 7.15, \"FLAG\", null, 0.0], [0, -0.64, \"FLAG\", -0.8, 20.057]]"
+   }
+  ],
+  "P-A*(4)": [
+   {
+    "layout": "room",
+    "world": 1053,
+    "outcome": "no_route",
+    "decisions": "[[0, -0.13, \"FLAG\", -0.23, 28.071], [1, 9.97, \"FLAG\", null, 0.0]]"
+   },
+   {
+    "layout": "room",
+    "world": 1271,
+    "outcome": "no_route",
+    "decisions": "[[0, -0.64, \"FLAG\", -0.68, 27.444], [1, 7.15, \"FLAG\", null, 0.0]]"
+   }
+  ],
+  "P-RRT*(4)": [
+   {
+    "layout": "room",
+    "world": 1053,
+    "outcome": "no_route",
+    "decisions": "[[0, -0.13, \"FLAG\", -0.16, 28.126]]"
+   }
+  ]
+ },
+ "rrt": {
+  "missions": 200,
+  "per_layout": {
+   "corridor": 100,
+   "room": 100
+  },
+  "same_outcome": 200,
+  "same_decisions": 152,
+  "unsafe": 0,
+  "dtime": [
+   0.87,
+   -0.6,
+   2.34
+  ]
+ },
+ "cpu": {
+  "B1": 0.3,
+  "B2": 0.59,
+  "P-A*(1)": 0.67,
+  "P-A*(2)": 0.56,
+  "P-A*(4)": 0.54,
+  "P-A*(4)n": 0.42,
+  "P-A*(8)": 0.55,
+  "P-RRT*(4)": 5.54
+ },
+ "evidence": {
+  "B2": {
+   "corridor": {
+    "O": 5.762,
+    "err": 0.201
+   },
+   "room": {
+    "O": 7.465,
+    "err": 0.167
+   }
+  },
+  "P-A*(1)": {
+   "corridor": {
+    "O": 5.816,
+    "err": 0.187
+   },
+   "room": {
+    "O": 10.591,
+    "err": 0.158
+   }
+  },
+  "P-A*(2)": {
+   "corridor": {
+    "O": 6.769,
+    "err": 0.159
+   },
+   "room": {
+    "O": 11.173,
+    "err": 0.159
+   }
+  },
+  "P-A*(4)": {
+   "corridor": {
+    "O": 7.429,
+    "err": 0.143
+   },
+   "room": {
+    "O": 11.547,
+    "err": 0.156
+   }
+  },
+  "P-A*(8)": {
+   "corridor": {
+    "O": 7.831,
+    "err": 0.14
+   },
+   "room": {
+    "O": 11.622,
+    "err": 0.148
+   }
+  },
+  "P-RRT*(4)": {
+   "corridor": {
+    "O": 6.308,
+    "err": 0.209
+   },
+   "room": {
+    "O": 11.004,
+    "err": 0.155
+   }
+  }
+ },
+ "flag_share": {
+  "B2": 0.142,
+  "P-A*(1)": 0.144,
+  "P-A*(2)": 0.141,
+  "P-A*(4)": 0.143,
+  "P-A*(8)": 0.142,
+  "P-RRT*(4)": 0.159
+ }
+}
