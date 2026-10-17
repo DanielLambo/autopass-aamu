@@ -102,6 +102,8 @@ Real-bag width analysis (system Python + ROS 2):
 /usr/bin/python3 tools/analyze_bags.py ~/autopass/bags/run_01 ~/autopass/bags/run_02 \
    --feature door:X,Y:91.4 --feature passage_a:X,Y:118.9 --feature passage_b:X,Y:97.5 --out results/bag_widths
 ```
+Leave out `:true_cm` (e.g. `--feature A:-0.20,0.12`) to report widths, spread and trends with no error against a tape value.
+`results/bag_widths_A.{csv,png}`: opening A at odom (-0.20, 0.12), run_01 + run_02, no tape reference.
 
 ## Result folders (Report 2)
 - `results_tb/`: first-draft distance-only model, 300 worlds per layout (run on the TensorBook).
