@@ -25,6 +25,30 @@ from autopass_sim.observability import ObsModel
 from autopass_sim.mission import Config, _observe
 from autopass_sim.planners import astar, free_with_blocked, path_length, resample
 from autopass_sim.sensor import view_geometry, jambs_visible
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra
+
+
+def distance_field(free, res, goal):
+    """Grid distance (m) from every free cell to the goal cell: same 8-neighbour moves,
+    unit cost and no-corner-cutting rule as planners.astar. inf where unreachable/blocked."""
+    ny, nx = free.shape
+    idx = np.arange(nx * ny).reshape(ny, nx)
+    rows, cols, wts = [], [], []
+    for dx, dy, w in ((1, 0, 1.0), (0, 1, 1.0), (1, 1, np.sqrt(2)), (1, -1, np.sqrt(2))):
+        ys = slice(max(0, -dy), ny - max(0, dy))
+        xs = slice(0, nx - dx)
+        ys2 = slice(max(0, dy), ny + min(0, dy) if dy < 0 else ny)
+        a, b = free[ys, xs], free[ys2, dx:]
+        ok = a & b
+        if dx and dy:                                  # diagonal: both orthogonal cells must be free
+            ok &= free[ys, dx:] & free[ys2, xs]
+        rows.append(idx[ys, xs][ok]); cols.append(idx[ys2, dx:][ok]); wts.append(np.full(ok.sum(), w * res))
+    g = coo_matrix((np.concatenate(wts), (np.concatenate(rows), np.concatenate(cols))), shape=(nx * ny,) * 2).tocsr()
+    gx, gy = int(goal[0] / res), int(goal[1] / res)
+    if not free[gy, gx]:
+        return np.full((ny, nx), np.inf)
+    return dijkstra(g, directed=False, indices=gy * nx + gx).reshape(ny, nx)
 
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 N_MAX = 3
@@ -88,6 +112,15 @@ class AutoPassEnv(gym.Env):
         for i, d in enumerate(self.doors):
             for k in range(K):
                 self.vp[i, k] = self._snap(np.array([d.xc + VIEWPOINTS[k, 0], d.yw - VIEWPOINTS[k, 1]]))
+        # one goal-rooted distance field per door (other doors blocked); None once the door is rejected
+        self.field = {}
+        for i, d in enumerate(self.doors):
+            others = {o.id for o in self.world.doors if o.id != d.id}
+            fr = free_with_blocked(self.world, others)
+            gc = (np.floor(self.world.goal / self.world.res) + 0.5) * self.world.res
+            self.field[i] = (distance_field(fr, self.world.res, self.world.goal) +
+                             float(np.linalg.norm(self.world.goal - gc)), fr)
+        self.goto_cache = {}              # (start x, y rounded to 1 cm, door i, viewpoint k) -> path
         self.route = {i: self._route_len(i) for i in range(len(self.doors))}
         _observe(self.world, self.pos, self.srng, self.cfg, self.model, self.memory, None)
         self.scans += 1
@@ -109,11 +142,26 @@ class AutoPassEnv(gym.Env):
         return 0 <= i < w and 0 <= j < h and bool(self.free_near[j, i])
 
     def _route_len(self, i):
-        """Known-map path length from the current position through door i to the goal."""
-        others = {d.id for d in self.world.doors if d.id != self.doors[i].id}
-        p = astar(self.world, self.pos, self.world.goal, np.ones_like(self.world.free, float),
-                  free=free_with_blocked(self.world, others))
-        return (p, path_length(p)) if p is not None else (None, np.inf)
+        """Known-map route length from the current position through door i to the goal, read from
+        door i's distance field: field at the robot's cell + distance to that cell's centre.
+        Grid-path length (no shortcutting), so slightly longer than the A* route; the exact A*
+        path is only computed when a COMMIT executes. Rejected doors keep their last value."""
+        if self.field.get(i) is None:
+            return self.route[i]
+        D = self.field[i][0]
+        res = self.world.res
+        cx, cy = int(self.pos[0] / res), int(self.pos[1] / res)
+        if not (0 <= cy < D.shape[0] and 0 <= cx < D.shape[1]) or not np.isfinite(D[cy, cx]):
+            return (None, np.inf)
+        centre = np.array([(cx + 0.5) * res, (cy + 0.5) * res])
+        return (None, float(D[cy, cx] + np.linalg.norm(self.pos - centre)))
+
+    def _commit_path(self, i):
+        """Exact A* path through door i (other doors blocked), for the executed COMMIT."""
+        fr = self.field[i][1] if self.field.get(i) is not None else \
+            free_with_blocked(self.world, {d.id for d in self.world.doors if d.id != self.doors[i].id})
+        p = astar(self.world, self.pos, self.world.goal, np.ones_like(self.world.free, float), free=fr)
+        return (p, path_length(p)) if p is not None else self.route[i]
 
     # ------------------------------------------------------------------ belief
     def _fused(self, d):
@@ -165,8 +213,14 @@ class AutoPassEnv(gym.Env):
 
         if a < self.A_DWELL:                        # GOTO
             i, k = divmod(a, K)
-            path = astar(self.world, self.pos, self.vp[i, k], np.ones_like(self.world.free, float),
-                         free=self.free_near)
+            key = (round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), i, k)
+            if key not in self.goto_cache:
+                self.goto_cache[key] = astar(self.world, self.pos, self.vp[i, k],
+                                             np.ones_like(self.world.free, float), free=self.free_near)
+            path = self.goto_cache[key]
+            if path is not None:
+                path = path.copy()
+                path[0] = self.pos                  # start from the exact position (cached start is within 1 cm)
             if path is not None and len(path) > 1:
                 pts, s = resample(path, self.cfg.step)
                 for p in pts[1:]:
@@ -185,7 +239,7 @@ class AutoPassEnv(gym.Env):
                 self.shield_blocks += 1
                 self._dwell()                       # shield: COMMIT only executes on a z-test PASS
             else:
-                path, L = self.route[i]
+                path, L = self._commit_path(i)
                 self.path_len += L
                 self.sim_time += L / self.cfg.speed
                 terminated = True
@@ -197,6 +251,7 @@ class AutoPassEnv(gym.Env):
         else:                                       # REJECT
             i = a - self.A_REJECT
             self.rejected.add(self.doors[i].id)
+            self.field[i] = None                    # field no longer used; route[i] keeps its last value
             if all(d.id in self.rejected for d in self.doors):
                 terminated, outcome = True, "flag"   # all doors blocked: FLAG, logged, robot stops
 
