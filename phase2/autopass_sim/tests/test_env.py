@@ -1,0 +1,106 @@
+"""AutoPassEnv tests. Run: python -m pytest -q tests"""
+import numpy as np
+import pytest
+from gymnasium.utils.env_checker import check_env
+from autopass_rl.env import AutoPassEnv, SafeAutoPassEnv, N_MAX, K
+from autopass_rl.policies import RulePolicy, random_policy, rollout
+
+
+@pytest.fixture(scope="module")
+def env():
+    return AutoPassEnv()
+
+
+def test_gymnasium_api(env):
+    check_env(AutoPassEnv(), skip_render_check=True)
+
+
+def test_obs_shape_and_finite(env):
+    obs, info = env.reset(seed=0)
+    assert obs.shape == env.observation_space.shape and np.all(np.isfinite(obs))
+    assert info["action_mask"].shape == (env.action_space.n,) and info["action_mask"][env.A_DWELL]
+
+
+def test_seeded_runs_repeat_exactly(env):
+    a = rollout(env, random_policy, seed=7)
+    b = rollout(env, random_policy, seed=7)
+    assert a["traj"] == b["traj"] and a["outcome"] == b["outcome"]
+    assert np.array_equal(a["final_obs"], b["final_obs"])
+
+
+def test_different_seeds_differ(env):
+    env.reset(seed=1); w1 = [d.w for d in env.doors]
+    env.reset(seed=2); w2 = [d.w for d in env.doors]
+    assert w1 != w2
+
+
+def test_cost_only_on_unsafe_commit():
+    """Commit to a door narrower than w_A -> cost 1, reward unchanged by safety."""
+    env = AutoPassEnv(commit_needs_trusted=False)
+    for seed in range(50):
+        env.reset(seed=seed, options={"w_A": 81.3})
+        bad = [i for i, d in enumerate(env.doors) if d.w * 100 < env.w_A and env.action_masks()[env.A_COMMIT + i]]
+        good = [i for i, d in enumerate(env.doors) if d.w * 100 >= env.w_A and env.action_masks()[env.A_COMMIT + i]]
+        if bad and good:
+            t0 = env.sim_time
+            _, r_bad, term, _, info = env.step(env.A_COMMIT + bad[0])
+            r_bad += env.time_cost * (info["sim_time"] - t0)
+            assert term and info["cost"] == 1.0 and info["outcome"] == "unsafe"
+            env.reset(seed=seed, options={"w_A": 81.3})
+            t0 = env.sim_time
+            _, r_good, term, _, info = env.step(env.A_COMMIT + good[0])
+            r_good += env.time_cost * (info["sim_time"] - t0)
+            assert term and info["cost"] == 0.0 and info["outcome"] == "success"
+            assert abs(r_bad - r_good) < 1e-9                      # safety lives in the cost, not the reward
+            return
+    pytest.skip("no seed with both a visible narrow and a visible wide door at reset")
+
+
+def test_commit_masked_without_trusted_view(env):
+    env.reset(seed=3)
+    for i, d in enumerate(env.doors):
+        if env._fused(d)[3] == 0:
+            assert not env.action_masks()[env.A_COMMIT + i]
+
+
+def test_rejected_door_is_masked(env):
+    env.reset(seed=4)
+    env.step(env.A_REJECT + 0)
+    m = env.action_masks()
+    assert not m[env.A_COMMIT] and not m[env.A_REJECT] and not m[0:K].any()
+
+
+def test_invalid_action_becomes_dwell(env):
+    env.reset(seed=5)
+    env.step(env.A_REJECT + 0)
+    scans = env.scans
+    _, _, term, _, info = env.step(env.A_COMMIT + 0)   # masked -> DWELL
+    assert not term and info["scans"] == scans + 1
+
+
+def test_shield_blocks_unconfirmed_commit():
+    e = AutoPassEnv(shield=True, commit_needs_trusted=False)
+    e.reset(seed=6)
+    i = next(i for i in range(len(e.doors)) if e.ztest(i) != "PASS")
+    _, _, term, _, info = e.step(e.A_COMMIT + i)
+    assert not term and info["shield_blocks"] == 1 and info["cost"] == 0.0
+
+
+def test_all_rejected_ends_as_flag(env):
+    env.reset(seed=8)
+    for i in range(len(env.doors)):
+        _, _, term, _, info = env.step(env.A_REJECT + i)
+    assert term and info["outcome"] == "flag" and info["cost"] == 0.0
+
+
+def test_safe_env_six_tuple():
+    e = SafeAutoPassEnv()
+    e.reset(seed=0)
+    out = e.step(e.A_DWELL)
+    assert len(out) == 6 and out[2] == 0.0
+
+
+def test_rule_policy_is_safe_on_small_batch(env):
+    res = [rollout(env, RulePolicy(), seed=s) for s in range(20)]
+    assert sum(r["cost"] for r in res) == 0
+    assert sum(r["outcome"] == "success" for r in res) >= 15

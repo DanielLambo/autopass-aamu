@@ -109,3 +109,14 @@ Leave out `:true_cm` (e.g. `--feature A:-0.20,0.12`) to report widths, spread an
 - `results_tb/`: first-draft distance-only model, 300 worlds per layout (run on the TensorBook).
 - `results_rev/`: revised density-aware model: main run (`missions_raw.csv`), voxel-map run, harder scenarios and the rho ablation (`missions_raw_scen.csv`); `report_numbers.json` and `scenario_numbers.json` hold every number quoted in Report 2.
 - `results/calib_density.csv`: the 31,200-sweep density/angle calibration behind `calib_rho.json`.
+
+## Report 3: constrained-RL environment (`autopass_rl/`)
+
+```bash
+pip install gymnasium torch                       # CPU torch is enough
+python -m pytest -q tests                         # includes tests/test_env.py
+python tools/sanity_env.py --episodes 200         # random vs rule, shield on/off, determinism
+python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_s0
+python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_shield_s0 --shield
+```
+MDP spec: `autopass_rl/MDP.md`. Simulation only.
