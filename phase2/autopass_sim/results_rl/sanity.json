@@ -1,0 +1,67 @@
+{
+ "summary": {
+  "random": {
+   "n": 200,
+   "success": 98,
+   "unsafe": 51,
+   "flag": 51,
+   "timeout": 0,
+   "mean_return": 4.855812925321078,
+   "mean_cost": 0.255,
+   "mean_path_m": 25.783120746789233,
+   "mean_time_s": 51.88374149357846,
+   "mean_scans": 81.085,
+   "mean_steps": 7.43,
+   "shield_blocks": 0
+  },
+  "random+shield": {
+   "n": 200,
+   "success": 105,
+   "unsafe": 0,
+   "flag": 95,
+   "timeout": 0,
+   "mean_return": 2.31095411115805,
+   "mean_cost": 0.0,
+   "mean_path_m": 28.9567088884195,
+   "mean_time_s": 58.780917776839,
+   "mean_scans": 103.685,
+   "mean_steps": 10.71,
+   "shield_blocks": 140
+  },
+  "rule": {
+   "n": 200,
+   "success": 197,
+   "unsafe": 0,
+   "flag": 3,
+   "timeout": 0,
+   "mean_return": 8.49652450777107,
+   "mean_cost": 0.0,
+   "mean_path_m": 11.973504922289303,
+   "mean_time_s": 27.069509844578604,
+   "mean_scans": 31.86,
+   "mean_steps": 9.145,
+   "shield_blocks": 0
+  },
+  "rule+shield": {
+   "n": 200,
+   "success": 197,
+   "unsafe": 0,
+   "flag": 3,
+   "timeout": 0,
+   "mean_return": 8.49652450777107,
+   "mean_cost": 0.0,
+   "mean_path_m": 11.973504922289303,
+   "mean_time_s": 27.069509844578604,
+   "mean_scans": 31.86,
+   "mean_steps": 9.145,
+   "shield_blocks": 0
+  }
+ },
+ "repeat_ok": true,
+ "args": {
+  "episodes": 200,
+  "seed0": 5000,
+  "procs": 20,
+  "out": "results_rl/sanity.json"
+ }
+}

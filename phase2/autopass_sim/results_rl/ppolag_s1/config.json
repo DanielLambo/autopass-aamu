@@ -1,0 +1,19 @@
+{
+ "total_steps": 500000,
+ "envs": 18,
+ "horizon": 128,
+ "seed": 1,
+ "shield": false,
+ "agents": "profiles",
+ "cost_limit": 0.01,
+ "lam_lr": 0.5,
+ "lam_init": 0.0,
+ "lr": 0.0003,
+ "gamma": 0.99,
+ "gae": 0.95,
+ "epochs": 4,
+ "minibatches": 4,
+ "clip": 0.2,
+ "ent": 0.01,
+ "out": "results_rl/ppolag_s1"
+}
