@@ -71,7 +71,7 @@ class AutoPassEnv(gym.Env):
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
                  commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
-                 scan_budget=None, shield_mode="mask", budget_dist=None):
+                 scan_budget=None, shield_mode="mask", budget_dist=None, dwell_cap=None):
         self.layouts = list(layouts)
         self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
         self._fixed_budget = scan_budget
@@ -81,6 +81,11 @@ class AutoPassEnv(gym.Env):
         # "mask": COMMIT(i) is only a valid action when ztest(i) == PASS (preemptive shield).
         # "post": COMMIT is always valid; a non-PASS COMMIT is blocked and costs a DWELL (Report 3 v1).
         self.shield_mode = shield_mode
+        # dwell_cap (v3): DWELL is masked once either count reaches the cap, so the agent must COMMIT,
+        # REJECT or move. None = no cap (v1/v2).
+        #   per door: DWELLs made while standing at any viewpoint of door i (never resets)
+        #   per stop: consecutive DWELLs since the last GOTO that moved or REJECT (covers the start position)
+        self.dwell_cap = dwell_cap
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -123,6 +128,8 @@ class AutoPassEnv(gym.Env):
         self.rejected = set()
         self.t, self.sim_time, self.path_len, self.scans = 0, 0.0, 0.0, 0
         self.shield_blocks = 0
+        self.stop_dwells = 0
+        self.door_dwells = [0] * len(self.doors)
         self.free_near = free_with_blocked(self.world, {d.id for d in self.world.doors})  # start side only
         self.vp = {}                      # (i, k) -> reachable viewpoint position or None
         for i, d in enumerate(self.doors):
@@ -205,6 +212,10 @@ class AutoPassEnv(gym.Env):
         mask = np.zeros(self.n_actions, bool)
         can_scan = not self.budget_spent()
         mask[self.A_DWELL] = can_scan               # budget spent -> only COMMIT / REJECT remain
+        if can_scan and self.dwell_cap is not None:
+            j = self._vp_door()
+            if self.stop_dwells >= self.dwell_cap or (j is not None and self.door_dwells[j] >= self.dwell_cap):
+                mask[self.A_DWELL] = False
         for i, d in enumerate(self.doors):
             if d.id in self.rejected:
                 continue
@@ -249,9 +260,14 @@ class AutoPassEnv(gym.Env):
                 self.path_len += float(s[-1])
                 self.sim_time += float(s[-1]) / self.cfg.speed
                 self.pos = pts[-1]
+                self.stop_dwells = 0
             else:
                 self._dwell()
         elif a == self.A_DWELL:
+            self.stop_dwells += 1
+            j = self._vp_door()
+            if j is not None:
+                self.door_dwells[j] += 1
             self._dwell()
         elif a < self.A_REJECT:                     # COMMIT
             i = a - self.A_COMMIT
@@ -271,6 +287,7 @@ class AutoPassEnv(gym.Env):
         else:                                       # REJECT
             i = a - self.A_REJECT
             self.rejected.add(self.doors[i].id)
+            self.stop_dwells = 0
             self.field[i] = None                    # field no longer used; route[i] keeps its last value
             if all(d.id in self.rejected for d in self.doors):
                 terminated, outcome = True, "flag"   # all doors blocked: FLAG, logged, robot stops
@@ -282,6 +299,13 @@ class AutoPassEnv(gym.Env):
         if truncated:
             outcome = "timeout"
         return self._obs(), float(reward), terminated, truncated, self._info(outcome, cost)
+
+    def _vp_door(self):
+        """Open door whose viewpoint the robot is standing at (within 5 cm), or None."""
+        for (i, k), p in self.vp.items():
+            if p is not None and self.doors[i].id not in self.rejected and np.linalg.norm(p - self.pos) <= 0.05:
+                return i
+        return None
 
     def budget_spent(self):
         return self.scan_budget is not None and self.scans >= self.scan_budget

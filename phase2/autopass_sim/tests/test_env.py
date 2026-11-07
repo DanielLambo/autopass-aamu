@@ -172,3 +172,38 @@ def test_budget_observation_and_sampling():
     for s in range(10):
         a.reset(seed=s); b.reset(seed=s)
         assert a.w_A == b.w_A and [d.w for d in a.doors] == [d.w for d in b.doors]
+
+
+def test_dwell_cap_per_door_and_per_stop():
+    """dwell_cap: DWELL is masked after `cap` DWELLs at one door's viewpoints (summed over its viewpoints),
+    and after `cap` consecutive DWELLs at a stop that is not a viewpoint. Off by default."""
+    assert AutoPassEnv().dwell_cap is None
+    cap = 3
+    e = AutoPassEnv(dwell_cap=cap)
+    e.reset(seed=1)
+    for _ in range(cap):                                   # start position: per-stop count
+        assert e.action_masks()[e.A_DWELL]
+        e.step(e.A_DWELL)
+    if e._vp_door() is None:
+        assert not e.action_masks()[e.A_DWELL]
+    ks = [k for k in range(K) if e.vp[0, k] is not None]
+    e.step(0 * K + ks[0])                                  # move to a door-0 viewpoint: stop count resets
+    assert e.stop_dwells == 0 and e._vp_door() == 0
+    n = e.door_dwells[0]
+    while e.door_dwells[0] < cap:
+        assert e.action_masks()[e.A_DWELL]
+        e.step(e.A_DWELL)
+    assert not e.action_masks()[e.A_DWELL]                 # door 0 capped
+    e.step(0 * K + ks[1])                                  # another viewpoint of the same door: still capped
+    assert e._vp_door() == 0 and not e.action_masks()[e.A_DWELL]
+    e.step(e.A_REJECT + 0)                                 # REJECT door 0 frees DWELL again
+    assert e.action_masks()[e.A_DWELL] or e.budget_spent()
+
+
+def test_dwell_cap_20_leaves_rule_unchanged():
+    """The rule never dwells more than 20 times per door, so dwell_cap=20 must not change it."""
+    for seed in range(40):
+        a = rollout(AutoPassEnv(), RulePolicy(), seed=seed)
+        b = rollout(AutoPassEnv(dwell_cap=20), RulePolicy(), seed=seed)
+        fa, fb = a.pop("final_obs"), b.pop("final_obs")
+        assert a == b and np.array_equal(fa, fb)

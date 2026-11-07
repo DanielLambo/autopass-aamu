@@ -117,6 +117,8 @@ def main():
                     help="mask: non-PASS COMMIT is masked (v2); post: blocked after choosing it (v1)")
     ap.add_argument("--budget-dist", action="store_true",
                     help="sample scan_budget per episode from env.BUDGET_DIST_V2 (None .4, 30/20/12 .2 each)")
+    ap.add_argument("--dwell-cap", type=int, default=None,
+                    help="max DWELLs per door (nearest open door); DWELL masked at the cap (v3)")
     ap.add_argument("--agents", default="profiles", choices=["profiles", "uniform"])
     ap.add_argument("--cost-limit", type=float, default=0.01, help="d: allowed expected unsafe commits/episode")
     ap.add_argument("--lam-lr", type=float, default=0.05)
@@ -137,7 +139,8 @@ def main():
 
     from autopass_rl.env import BUDGET_DIST_V2
     venv = VecEnv(a.envs, dict(shield=a.shield, agents=a.agents, shield_mode=a.shield_mode,
-                               budget_dist=BUDGET_DIST_V2 if a.budget_dist else None), a.seed)
+                               budget_dist=BUDGET_DIST_V2 if a.budget_dist else None,
+                               dwell_cap=a.dwell_cap), a.seed)
     obs, mask = venv.init()
     agent = Agent(obs.shape[1], mask.shape[1])
     opt = torch.optim.Adam(agent.parameters(), lr=a.lr, eps=1e-5)
