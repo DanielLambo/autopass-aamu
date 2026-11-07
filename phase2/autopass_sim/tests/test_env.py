@@ -179,3 +179,23 @@ def test_hide_wA_zeroes_only_the_wA_feature():
     oa, _ = a.reset(seed=3); ob, _ = b.reset(seed=3)
     assert oa[4] != 0 and ob[4] == 0
     assert np.array_equal(np.delete(oa, 4), np.delete(ob, 4))
+
+
+def test_world_seed_option_rebuilds_report2_world():
+    from autopass_sim.world import make_world
+    e = AutoPassEnv()
+    e.reset(seed=0, options=dict(world_seed=1003, layout="corridor", w_A=81.3))
+    w = make_world(np.random.default_rng(1003), "corridor")
+    assert [round(d.w, 6) for d in e.world.doors] == [round(d.w, 6) for d in w.doors]
+    assert np.array_equal(e.world.free, w.free)
+
+
+def test_viewpoints_option_masks_other_viewpoints_and_keeps_rule():
+    e = AutoPassEnv(viewpoints=(0,))
+    _, info = e.reset(seed=2)
+    m = info["action_mask"]
+    assert not any(m[i * K + k] for i in range(len(e.doors)) for k in range(1, K))
+    for seed in range(20):
+        a = rollout(AutoPassEnv(), RulePolicy(), seed=seed); b = rollout(AutoPassEnv(viewpoints=(0,)), RulePolicy(), seed=seed)
+        a.pop("final_obs"); b.pop("final_obs")
+        assert a == b

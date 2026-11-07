@@ -71,7 +71,7 @@ class AutoPassEnv(gym.Env):
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
                  commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
-                 scan_budget=None, shield_mode="mask", budget_dist=None, hide_wA=False):
+                 scan_budget=None, shield_mode="mask", budget_dist=None, hide_wA=False, viewpoints=None):
         self.layouts = list(layouts)
         self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
         self._fixed_budget = scan_budget
@@ -84,6 +84,9 @@ class AutoPassEnv(gym.Env):
         # hide_wA (ablation): the explicit w_A feature (obs[4]) is set to 0. The per-door margin features
         # (m = width - w_A, z-score, z-test result) are unchanged, since the decision rule is defined on them.
         self.hide_wA = hide_wA
+        # viewpoints: allowed GOTO viewpoint indices (None = all K). (0,) = only the square-on commit point,
+        # i.e. no repositioning to a better view (Report 2 "-nr" scenario).
+        self.viewpoints = None if viewpoints is None else set(viewpoints)
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -105,6 +108,8 @@ class AutoPassEnv(gym.Env):
         options = options or {}
         # world and sensor streams both derive from the Gymnasium np_random -> seeded runs repeat
         wseed, sseed = (int(x) for x in self.np_random.integers(0, 2**31 - 1, 2))
+        if "world_seed" in options:           # rebuild a Report 2 world: make_world(default_rng(seed), layout)
+            wseed = int(options["world_seed"]); sseed = wseed * 101 + 7
         layout = options.get("layout") or self.layouts[int(self.np_random.integers(len(self.layouts)))]
         if "w_A" in options:
             self.w_A = float(options["w_A"])
@@ -213,7 +218,8 @@ class AutoPassEnv(gym.Env):
                 continue
             for k in range(K):
                 p = self.vp[i, k]
-                mask[i * K + k] = can_scan and p is not None and np.linalg.norm(p - self.pos) > 0.05
+                mask[i * K + k] = can_scan and p is not None and np.linalg.norm(p - self.pos) > 0.05 \
+                    and (self.viewpoints is None or k in self.viewpoints)
             n_trusted = self._fused(d)[3]
             ok = np.isfinite(self.route[i][1]) and (n_trusted > 0 or not self.commit_needs_trusted)
             if self.shield and self.shield_mode == "mask":
