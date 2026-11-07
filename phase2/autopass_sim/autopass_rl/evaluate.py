@@ -25,7 +25,7 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import torch
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, binomtest
 
 from autopass_rl.env import AutoPassEnv
 from autopass_rl.policies import RulePolicy
@@ -191,6 +191,20 @@ def fmt_md(setting, runs, agg):
     return "\n".join(lines)
 
 
+def mcnemar_md(ep):
+    """Paired exact McNemar test on success vs rule, per training seed (same episodes)."""
+    ref = ep[ep.policy == "rule"].set_index("seed").outcome.eq("success").sort_index()
+    lines = ["Success vs rule, paired exact McNemar per training seed (b = only policy succeeds, "
+             "c = only rule succeeds):", "", "| policy | seed | success % | Δ pts vs rule | b | c | p |", "|---|---|---|---|---|---|---|"]
+    for pol in [p for p in ep.policy.unique() if "|" in p]:
+        x = ep[ep.policy == pol].set_index("seed").outcome.eq("success").sort_index()
+        b, c = int((x & ~ref).sum()), int((~x & ref).sum())
+        p = binomtest(b, b + c, 0.5).pvalue if b + c else 1.0
+        lines.append(f"| {group_name(pol)} | {pol.split('|')[0].rsplit('_s', 1)[1]} | {100 * x.mean():.1f} | "
+                     f"{100 * (x.mean() - ref.mean()):+.1f} | {b} | {c} | {p:.3g} |")
+    return "\n".join(lines + [""])
+
+
 args_seed0 = 5000
 
 
@@ -224,7 +238,7 @@ def main():
         agg = aggregate(runs)
         out = pd.concat([runs, agg], ignore_index=True)
         out.to_csv(os.path.join(a.out, f"eval_{setting}.csv"), index=False)
-        block = fmt_md(setting, runs, agg)
+        block = fmt_md(setting, runs, agg) + mcnemar_md(ep)
         open(os.path.join(a.out, f"eval_{setting}.md"), "w").write("# Report 3 deterministic evaluation (simulated)\n\n" + block)
         print(block, flush=True)
         print(f"[{setting}] {len(ep)} episodes in {time.time() - t0:.0f}s", flush=True)
