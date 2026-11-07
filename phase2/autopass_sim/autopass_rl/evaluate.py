@@ -39,8 +39,10 @@ SETTINGS = {
 }
 # Policy sets. Each trained run: (run name, agent dir under results_rl, group label, eval variants).
 # Eval variant tag -> (shield on, shield_mode). v1 used the post-hoc shield; v2 uses the action mask.
-EVALS = {"eval_noshield": (False, "mask"), "eval_shield": (True, "mask"), "eval_postshield": (True, "post")}
-EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "eval_postshield": "eval shield"}
+EVALS = {"eval_noshield": (False, "mask"), "eval_shield": (True, "mask"), "eval_postshield": (True, "post"),
+         "eval_noshield_nowa": (False, "mask", True), "eval_shield_nowa": (True, "mask", True)}
+EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "eval_postshield": "eval shield",
+              "eval_noshield_nowa": "eval no shield", "eval_shield_nowa": "eval shield"}
 V1_EVALS = ("eval_noshield", "eval_postshield")
 POLICY_SETS = {
     "v1": [(f"ppolag_s{s}", f"ppolag_s{s}", "PPO-Lag", V1_EVALS) for s in range(3)] +
@@ -51,6 +53,10 @@ POLICY_SETS = {
             ("eval_noshield", "eval_shield")) for s in range(3)] +
           [(f"v1_ppolag_shield_s{s}", f"ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
             ("eval_postshield",)) for s in range(3)],
+    # addendum: v2-A with the w_A feature zeroed (agent and eval env both hide it)
+    "v2nowa": [(f"A_noWA_s{s}", f"v2/addendum/A_noWA_s{s}", "v2-A-noWA (w_A hidden)",
+                ("eval_noshield_nowa", "eval_shield_nowa")) for s in range(3)] +
+              [(f"A_mask_budget_s{s}", f"v2/A_mask_budget_s{s}", "v2-A", ("eval_noshield", "eval_shield")) for s in range(3)],
 }
 GROUP = {}   # run name -> group label, filled from the chosen policy set
 METRICS = ("path_m", "time_s", "scans")
@@ -93,8 +99,8 @@ def run_episode(env, policy, seed):
 
 def _job(args):
     torch.set_num_threads(1)
-    setting, pol, eval_shield, shield_mode, agent_path, seeds = args
-    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, **SETTINGS[setting])
+    setting, pol, eval_shield, shield_mode, hide_wA, agent_path, seeds = args
+    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, hide_wA=hide_wA, **SETTINGS[setting])
     policy = RulePolicy() if agent_path is None else load_agent(agent_path)
     return [dict(setting=setting, policy=pol, eval_shield=eval_shield, **run_episode(env, policy, s))
             for s in seeds]
@@ -226,11 +232,11 @@ def main():
     chunks = [seeds[i:i + 25] for i in range(0, len(seeds), 25)]
     for setting in a.settings:
         t0 = time.time()
-        pols = [("rule", False, "mask", None), ("rule+shield", True, "mask", None)]
+        pols = [("rule", False, "mask", False, None), ("rule+shield", True, "mask", False, None)]
         for run, d, _, evals in POLICY_SETS[a.set]:
             p = os.path.join(a.runs_dir, d, "agent.pt")
-            pols += [(f"{run}|{ev}", *EVALS[ev], p) for ev in evals]
-        jobs = [(setting, name, sh, mode, p, c) for name, sh, mode, p in pols for c in chunks]
+            pols += [(f"{run}|{ev}", *(EVALS[ev] + (False,))[:3], p) for ev in evals]
+        jobs = [(setting, name, sh, mode, hw, p, c) for name, sh, mode, hw, p in pols for c in chunks]
         with Pool(a.procs) as pool:
             ep = pd.DataFrame([r for rs in pool.map(_job, jobs, chunksize=1) for r in rs])
         ep.to_csv(os.path.join(a.out, f"episodes_{setting}.csv"), index=False)

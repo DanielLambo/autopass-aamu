@@ -71,7 +71,7 @@ class AutoPassEnv(gym.Env):
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
                  commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
-                 scan_budget=None, shield_mode="mask", budget_dist=None):
+                 scan_budget=None, shield_mode="mask", budget_dist=None, hide_wA=False):
         self.layouts = list(layouts)
         self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
         self._fixed_budget = scan_budget
@@ -81,6 +81,9 @@ class AutoPassEnv(gym.Env):
         # "mask": COMMIT(i) is only a valid action when ztest(i) == PASS (preemptive shield).
         # "post": COMMIT is always valid; a non-PASS COMMIT is blocked and costs a DWELL (Report 3 v1).
         self.shield_mode = shield_mode
+        # hide_wA (ablation): the explicit w_A feature (obs[4]) is set to 0. The per-door margin features
+        # (m = width - w_A, z-score, z-test result) are unchanged, since the decision rule is defined on them.
+        self.hide_wA = hide_wA
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -297,7 +300,7 @@ class AutoPassEnv(gym.Env):
         W, H = self.world.W, self.world.H
         g = self.world.goal - self.pos
         o = [self.pos[0] / W, self.pos[1] / H, g[0] / 20, g[1] / 20,
-             (self.w_A - 76.0) / 10, self.t / self.max_steps, self.sim_time / self.max_time]
+             0.0 if self.hide_wA else (self.w_A - 76.0) / 10, self.t / self.max_steps, self.sim_time / self.max_time]
         for i in range(N_MAX):
             if i >= len(self.doors):
                 o += [0.0] * OBS_DOOR

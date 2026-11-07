@@ -172,3 +172,10 @@ def test_budget_observation_and_sampling():
     for s in range(10):
         a.reset(seed=s); b.reset(seed=s)
         assert a.w_A == b.w_A and [d.w for d in a.doors] == [d.w for d in b.doors]
+
+
+def test_hide_wA_zeroes_only_the_wA_feature():
+    a, b = AutoPassEnv(), AutoPassEnv(hide_wA=True)
+    oa, _ = a.reset(seed=3); ob, _ = b.reset(seed=3)
+    assert oa[4] != 0 and ob[4] == 0
+    assert np.array_equal(np.delete(oa, 4), np.delete(ob, 4))
