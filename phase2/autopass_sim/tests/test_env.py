@@ -79,7 +79,8 @@ def test_invalid_action_becomes_dwell(env):
 
 
 def test_shield_blocks_unconfirmed_commit():
-    e = AutoPassEnv(shield=True, commit_needs_trusted=False)
+    """post mode (Report 3 v1): a non-PASS COMMIT is valid but blocked and costs a DWELL."""
+    e = AutoPassEnv(shield=True, shield_mode="post", commit_needs_trusted=False)
     e.reset(seed=6)
     i = next(i for i in range(len(e.doors)) if e.ztest(i) != "PASS")
     _, _, term, _, info = e.step(e.A_COMMIT + i)
@@ -121,3 +122,53 @@ def test_scan_budget_masks_goto_and_dwell():
     for seed in range(20):
         r = rollout(e, RulePolicy(), seed=seed)
         assert r["scans"] <= 12 and r["cost"] == 0 and r["outcome"] != "timeout"
+
+
+def test_mask_shield_masks_non_pass_commit():
+    """mask mode: COMMIT(i) is valid only on a z-test PASS, so no commit is ever blocked."""
+    e = AutoPassEnv(shield=True, shield_mode="mask", commit_needs_trusted=False)
+    e.reset(seed=6)
+    m = e.action_masks()
+    for i in range(len(e.doors)):
+        if e.ztest(i) != "PASS":
+            assert not m[e.A_COMMIT + i]
+    i = next(i for i in range(len(e.doors)) if e.ztest(i) != "PASS")
+    _, _, term, _, info = e.step(e.A_COMMIT + i)          # masked -> plain DWELL, not a shield block
+    assert not term and info["shield_blocks"] == 0
+
+
+def test_mask_shield_no_timeouts_from_blocked_commits():
+    """A commit-greedy policy (always COMMIT when any COMMIT is valid) is never blocked in mask mode,
+    so it cannot time out by repeating blocked commits."""
+    def greedy(env, info):
+        m = info["action_mask"]
+        c = np.flatnonzero(m[env.A_COMMIT:env.A_REJECT])
+        if len(c):
+            return env.A_COMMIT + int(c[0])
+        return env.A_DWELL if m[env.A_DWELL] else env.A_REJECT + int(np.flatnonzero(m[env.A_REJECT:])[0])
+    em = AutoPassEnv(shield=True, shield_mode="mask")
+    for seed in range(30):
+        r = rollout(em, greedy, seed=seed)
+        assert r["shield_blocks"] == 0 and r["cost"] == 0     # nothing blocked -> no blocked-commit loop
+
+
+def test_budget_observation_and_sampling():
+    e = AutoPassEnv()
+    obs, _ = e.reset(seed=0)
+    assert obs.shape == (e.observation_space.shape[0],) and tuple(obs[-2:]) == (0.0, 1.0)
+    e = AutoPassEnv(scan_budget=20)
+    obs, _ = e.reset(seed=0)
+    assert obs[-2] == 1.0 and np.isclose(obs[-1], (20 - e.scans) / 40)
+    e.step(e.A_DWELL)
+    assert np.isclose(e._obs()[-1], (20 - e.scans) / 40)
+    from autopass_rl.env import BUDGET_DIST_V2
+    e = AutoPassEnv(budget_dist=BUDGET_DIST_V2)
+    seen = set()
+    for s in range(200):
+        e.reset(seed=s); seen.add(e.scan_budget)
+    assert seen == {None, 30, 20, 12}
+    # the budget draw comes last: worlds and agents per seed match the no-budget env
+    a, b = AutoPassEnv(), AutoPassEnv(budget_dist=BUDGET_DIST_V2)
+    for s in range(10):
+        a.reset(seed=s); b.reset(seed=s)
+        assert a.w_A == b.w_A and [d.w for d in a.doors] == [d.w for d in b.doors]

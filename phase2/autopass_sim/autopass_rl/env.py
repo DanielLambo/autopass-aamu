@@ -61,6 +61,8 @@ VIEWPOINTS = np.array([[0.0, 1.2],    # 0 square-on at the commit point
 K = len(VIEWPOINTS)
 AGENTS = {"wheelchair": 81.3, "walker": 71.1}
 OBS_GLOBAL, OBS_DOOR = 7, 14
+OBS_BUDGET = 2       # appended last: has_budget, remaining_sweeps / 40 (v1 agents use obs[:-OBS_BUDGET])
+BUDGET_DIST_V2 = ((None, 0.4), (30, 0.2), (20, 0.2), (12, 0.2))
 
 
 class AutoPassEnv(gym.Env):
@@ -69,9 +71,16 @@ class AutoPassEnv(gym.Env):
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
                  commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
-                 scan_budget=None):
+                 scan_budget=None, shield_mode="mask", budget_dist=None):
         self.layouts = list(layouts)
         self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
+        self._fixed_budget = scan_budget
+        # budget_dist: ((budget or None, prob), ...) sampled at each reset (training); overrides scan_budget
+        self.budget_dist = tuple(budget_dist) if budget_dist else None
+        assert shield_mode in ("post", "mask")
+        # "mask": COMMIT(i) is only a valid action when ztest(i) == PASS (preemptive shield).
+        # "post": COMMIT is always valid; a non-PASS COMMIT is blocked and costs a DWELL (Report 3 v1).
+        self.shield_mode = shield_mode
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -82,7 +91,7 @@ class AutoPassEnv(gym.Env):
         self.cfg = Config(protocol="trusted", sensor_mode=sensor_mode)
         self.n_actions = N_MAX * K + 1 + 2 * N_MAX
         self.action_space = spaces.Discrete(self.n_actions)
-        self.observation_space = spaces.Box(-10.0, 10.0, (OBS_GLOBAL + N_MAX * OBS_DOOR,), np.float32)
+        self.observation_space = spaces.Box(-10.0, 10.0, (OBS_GLOBAL + N_MAX * OBS_DOOR + OBS_BUDGET,), np.float32)
         self.A_DWELL = N_MAX * K
         self.A_COMMIT = N_MAX * K + 1
         self.A_REJECT = N_MAX * K + 1 + N_MAX
@@ -100,6 +109,11 @@ class AutoPassEnv(gym.Env):
             self.w_A = float(self.np_random.uniform(66.0, 92.0))
         else:
             self.w_A = float(list(AGENTS.values())[int(self.np_random.integers(len(AGENTS)))])
+        if self.budget_dist:                  # drawn last, so worlds/agents match the no-budget envs per seed
+            vals = [b for b, _ in self.budget_dist]
+            self.scan_budget = vals[int(self.np_random.choice(len(vals), p=[p for _, p in self.budget_dist]))]
+        else:
+            self.scan_budget = self._fixed_budget
         self.cfg.agent_w = self.w_A
         self.world = make_world(np.random.default_rng(wseed), layout, agent_w=self.w_A / 100)
         self.srng = np.random.default_rng(sseed)
@@ -199,6 +213,8 @@ class AutoPassEnv(gym.Env):
                 mask[i * K + k] = can_scan and p is not None and np.linalg.norm(p - self.pos) > 0.05
             n_trusted = self._fused(d)[3]
             ok = np.isfinite(self.route[i][1]) and (n_trusted > 0 or not self.commit_needs_trusted)
+            if self.shield and self.shield_mode == "mask":
+                ok = ok and self.ztest(i) == "PASS"
             mask[self.A_COMMIT + i] = ok
             mask[self.A_REJECT + i] = True
         return mask
@@ -239,7 +255,7 @@ class AutoPassEnv(gym.Env):
             self._dwell()
         elif a < self.A_REJECT:                     # COMMIT
             i = a - self.A_COMMIT
-            if self.shield and self.ztest(i) != "PASS":
+            if self.shield and self.shield_mode == "post" and self.ztest(i) != "PASS":
                 self.shield_blocks += 1
                 self._dwell()                       # shield: COMMIT only executes on a z-test PASS
             else:
@@ -297,6 +313,10 @@ class AutoPassEnv(gym.Env):
                   m / 10 if n else 0.0, min(s, 5.0) / 5 if n else 1.0, b, z / 5,
                   min(L, 40.0) / 40 if np.isfinite(L) else 1.0,
                   {"PASS": 1.0, "FAIL": -1.0, "FLAG": 0.0}[self.ztest(i)]]
+        if self.scan_budget is None:
+            o += [0.0, 1.0]
+        else:
+            o += [1.0, max(self.scan_budget - self.scans, 0) / 40]
         return np.clip(np.asarray(o, np.float32), -10.0, 10.0)
 
     def _info(self, outcome, cost):
