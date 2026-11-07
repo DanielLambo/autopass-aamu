@@ -37,10 +37,22 @@ SETTINGS = {
     "budget20": dict(scan_budget=20),
     "budget12": dict(scan_budget=12),
 }
-RUNS = {  # name -> (results dir, trained with shield)
-    **{f"ppolag_s{s}": (f"ppolag_s{s}", False) for s in range(3)},
-    **{f"ppolag_shield_s{s}": (f"ppolag_shield_s{s}", True) for s in range(3)},
+# Policy sets. Each trained run: (run name, agent dir under results_rl, group label, eval variants).
+# Eval variant tag -> (shield on, shield_mode). v1 used the post-hoc shield; v2 uses the action mask.
+EVALS = {"eval_noshield": (False, "mask"), "eval_shield": (True, "mask"), "eval_postshield": (True, "post")}
+EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "eval_postshield": "eval shield"}
+V1_EVALS = ("eval_noshield", "eval_postshield")
+POLICY_SETS = {
+    "v1": [(f"ppolag_s{s}", f"ppolag_s{s}", "PPO-Lag", V1_EVALS) for s in range(3)] +
+          [(f"ppolag_shield_s{s}", f"ppolag_shield_s{s}", "PPO-Lag(train shield)", V1_EVALS) for s in range(3)],
+    "v2": [(f"A_mask_budget_s{s}", f"v2/A_mask_budget_s{s}", "v2 PPO-Lag(mask shield + budget)",
+            ("eval_noshield", "eval_shield")) for s in range(3)] +
+          [(f"B_noshield_budget_s{s}", f"v2/B_noshield_budget_s{s}", "v2 PPO-Lag(no shield + budget)",
+            ("eval_noshield", "eval_shield")) for s in range(3)] +
+          [(f"v1_ppolag_shield_s{s}", f"ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
+            ("eval_postshield",)) for s in range(3)],
 }
+GROUP = {}   # run name -> group label, filled from the chosen policy set
 METRICS = ("path_m", "time_s", "scans")
 OUTCOMES = ("success", "unsafe", "flag", "timeout")
 
@@ -48,11 +60,14 @@ _agents = {}
 
 
 def load_agent(path):
+    """Agent sized from its own weights; v1 agents (no budget features) see obs[:n_obs]."""
     if path not in _agents:
-        env = AutoPassEnv()
-        a = Agent(env.observation_space.shape[0], env.action_space.n)
-        a.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
+        sd = torch.load(path, map_location="cpu", weights_only=True)
+        n_obs, n_act = sd["pi.0.0.weight"].shape[1], sd["pi.1.weight"].shape[0]
+        a = Agent(n_obs, n_act)
+        a.load_state_dict(sd)
         a.eval()
+        a.n_obs = n_obs
         _agents[path] = a
     return _agents[path]
 
@@ -67,7 +82,7 @@ def run_episode(env, policy, seed):
             a = policy(env, info)
         else:
             with torch.no_grad():
-                logits = policy.pi(torch.as_tensor(obs[None]))[0]
+                logits = policy.pi(torch.as_tensor(obs[None, :policy.n_obs]))[0]
                 logits = logits.masked_fill(~torch.as_tensor(info["action_mask"]), -torch.inf)
                 a = int(torch.argmax(logits))
         obs, r, term, trunc, info = env.step(a)
@@ -78,8 +93,8 @@ def run_episode(env, policy, seed):
 
 def _job(args):
     torch.set_num_threads(1)
-    setting, pol, eval_shield, agent_path, seeds = args
-    env = AutoPassEnv(shield=eval_shield, **SETTINGS[setting])
+    setting, pol, eval_shield, shield_mode, agent_path, seeds = args
+    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, **SETTINGS[setting])
     policy = RulePolicy() if agent_path is None else load_agent(agent_path)
     return [dict(setting=setting, policy=pol, eval_shield=eval_shield, **run_episode(env, policy, s))
             for s in seeds]
@@ -126,10 +141,9 @@ def summarize(ep, rng):
 
 
 def group_name(pol):
-    """'ppolag_shield_s1|eval_shield' -> 'PPO-Lag(train shield), eval shield'."""
+    """'ppolag_shield_s1|eval_postshield' -> 'PPO-Lag(train shield), eval shield'."""
     run, ev = pol.split("|")
-    train = "PPO-Lag(train shield)" if "shield" in run else "PPO-Lag"
-    return f"{train}, eval {'shield' if ev == 'eval_shield' else 'no shield'}"
+    return f"{GROUP[run]}, {EVAL_LABEL[ev]}"
 
 
 def aggregate(runs):
@@ -189,18 +203,20 @@ def main():
     ap.add_argument("--runs-dir", default="results_rl")
     ap.add_argument("--out", default="results_rl/eval")
     ap.add_argument("--procs", type=int, default=os.cpu_count())
+    ap.add_argument("--set", default="v1", choices=list(POLICY_SETS))
     a = ap.parse_args()
+    GROUP.update({run: label for run, _, label, _ in POLICY_SETS[a.set]})
     args_seed0 = a.seed0
     os.makedirs(a.out, exist_ok=True)
     seeds = list(range(a.seed0, a.seed0 + a.episodes))
     chunks = [seeds[i:i + 25] for i in range(0, len(seeds), 25)]
     for setting in a.settings:
         t0 = time.time()
-        pols = [("rule", False, None), ("rule+shield", True, None)]
-        for run, (d, _) in RUNS.items():
+        pols = [("rule", False, "mask", None), ("rule+shield", True, "mask", None)]
+        for run, d, _, evals in POLICY_SETS[a.set]:
             p = os.path.join(a.runs_dir, d, "agent.pt")
-            pols += [(f"{run}|eval_noshield", False, p), (f"{run}|eval_shield", True, p)]
-        jobs = [(setting, name, sh, p, c) for name, sh, p in pols for c in chunks]
+            pols += [(f"{run}|{ev}", *EVALS[ev], p) for ev in evals]
+        jobs = [(setting, name, sh, mode, p, c) for name, sh, mode, p in pols for c in chunks]
         with Pool(a.procs) as pool:
             ep = pd.DataFrame([r for rs in pool.map(_job, jobs, chunksize=1) for r in rs])
         ep.to_csv(os.path.join(a.out, f"episodes_{setting}.csv"), index=False)

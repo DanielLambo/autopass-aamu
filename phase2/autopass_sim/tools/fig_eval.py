@@ -3,18 +3,24 @@
 Run (from phase2/autopass_sim, after autopass_rl.evaluate):
     python tools/fig_eval.py
 """
-import os
+import argparse, os
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-D = "results_rl/eval"
+ap = argparse.ArgumentParser()
+ap.add_argument("--dir", default="results_rl/eval")
+ap.add_argument("--ppo", default=r"ppolag_shield_s\d\|eval_shield", help="regex for the PPO-Lag + shield policies")
+ap.add_argument("--ppo-label", default="PPO-Lag + shield\n(trained & evaluated with shield, 3 seeds)")
+ap.add_argument("--title", default="Report 3 deterministic evaluation, simulated (600 fixed seeds per policy and setting)")
+args = ap.parse_args()
+D = args.dir
 SETTINGS = ["main", "uniform", "budget20", "budget12"]
 LABELS = {"main": "main", "uniform": "uniform w_A\n(66-92 cm)", "budget20": "scan budget\n20", "budget12": "scan budget\n12"}
 POLS = {"rule": ("Rule (z-test)", "#4C72B0"),
-        "ppo_shield": ("PPO-Lag + shield\n(trained & evaluated with shield, 3 seeds)", "#DD8452")}
+        "ppo_shield": (args.ppo_label, "#DD8452")}
 
 
 def ci(x, rng, n=2000):
@@ -27,7 +33,7 @@ stats = {}
 for s in SETTINGS:
     ep = pd.read_csv(os.path.join(D, f"episodes_{s}.csv"))
     sel = {"rule": ep[ep.policy == "rule"],
-           "ppo_shield": ep[ep.policy.str.match(r"ppolag_shield_s\d\|eval_shield")]}
+           "ppo_shield": ep[ep.policy.str.match(args.ppo)]}
     for p, g in sel.items():
         for m in ("time_s", "scans"):
             stats[s, p, m] = ci(g[m].values.astype(float), rng)
@@ -45,7 +51,7 @@ for ax, m, yl in zip(axes, ("time_s", "scans"), ("mission time (s)", "sweeps per
 h, l = axes[0].get_legend_handles_labels()
 fig.legend(h, [t.replace("\n", " ") for t in l], loc="upper center", bbox_to_anchor=(0.5, 0.93), ncol=2,
            fontsize=8.5, frameon=False)
-fig.suptitle("Report 3 deterministic evaluation, simulated (600 fixed seeds per policy and setting)", fontsize=11)
+fig.suptitle(args.title, fontsize=11)
 fig.text(0.5, 0.005, "Simulated. Rule: 600 episodes. PPO-Lag + shield: 3 training seeds x 600 episodes pooled. "
          "Same seeds 5000-5599 for every bar.", ha="center", fontsize=8, color="0.3")
 fig.tight_layout(rect=(0, 0.04, 1, 0.88))

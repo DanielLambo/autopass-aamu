@@ -1,0 +1,14 @@
+{
+ "settings": [
+  "main",
+  "uniform",
+  "budget20",
+  "budget12"
+ ],
+ "seed0": 5000,
+ "episodes": 600,
+ "runs_dir": "results_rl",
+ "out": "results_rl/v2/eval",
+ "procs": 20,
+ "set": "v2"
+}
