@@ -25,7 +25,7 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import torch
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, binomtest
 
 from autopass_rl.env import AutoPassEnv
 from autopass_rl.policies import RulePolicy
@@ -38,9 +38,13 @@ SETTINGS = {
     "budget12": dict(scan_budget=12),
 }
 # Policy sets. Each trained run: (run name, agent dir under results_rl, group label, eval variants).
-# Eval variant tag -> (shield on, shield_mode). v1 used the post-hoc shield; v2 uses the action mask.
-EVALS = {"eval_noshield": (False, "mask"), "eval_shield": (True, "mask"), "eval_postshield": (True, "post")}
-EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "eval_postshield": "eval shield"}
+# Eval variant tag -> (shield on, shield_mode, dwell_cap). v1 used the post-hoc shield; v2 the action mask;
+# v3 adds the per-door dwell cap (the rule is identical with dwell_cap=20, so rule rows are run without it).
+EVALS = {"eval_noshield": (False, "mask", None), "eval_shield": (True, "mask", None),
+         "eval_postshield": (True, "post", None),
+         "eval_noshield_cap20": (False, "mask", 20), "eval_shield_cap20": (True, "mask", 20)}
+EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "eval_postshield": "eval shield",
+              "eval_noshield_cap20": "eval no shield", "eval_shield_cap20": "eval shield"}
 V1_EVALS = ("eval_noshield", "eval_postshield")
 POLICY_SETS = {
     "v1": [(f"ppolag_s{s}", f"ppolag_s{s}", "PPO-Lag", V1_EVALS) for s in range(3)] +
@@ -49,6 +53,12 @@ POLICY_SETS = {
             ("eval_noshield", "eval_shield")) for s in range(3)] +
           [(f"B_noshield_budget_s{s}", f"v2/B_noshield_budget_s{s}", "v2 PPO-Lag(no shield + budget)",
             ("eval_noshield", "eval_shield")) for s in range(3)] +
+          [(f"v1_ppolag_shield_s{s}", f"ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
+            ("eval_postshield",)) for s in range(3)],
+    "v3": [(f"A_mask_budget_cap20_s{s}", f"v3/A_mask_budget_cap20_s{s}", "v3 PPO-Lag(mask shield + budget + dwell cap 20)",
+            ("eval_noshield_cap20", "eval_shield_cap20")) for s in range(3)] +
+          [(f"v2_A_mask_budget_s{s}", f"v2/A_mask_budget_s{s}", "v2 PPO-Lag(mask shield + budget, no cap)",
+            ("eval_shield",)) for s in range(3)] +
           [(f"v1_ppolag_shield_s{s}", f"ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
             ("eval_postshield",)) for s in range(3)],
 }
@@ -93,8 +103,8 @@ def run_episode(env, policy, seed):
 
 def _job(args):
     torch.set_num_threads(1)
-    setting, pol, eval_shield, shield_mode, agent_path, seeds = args
-    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, **SETTINGS[setting])
+    setting, pol, eval_shield, shield_mode, dwell_cap, agent_path, seeds = args
+    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, dwell_cap=dwell_cap, **SETTINGS[setting])
     policy = RulePolicy() if agent_path is None else load_agent(agent_path)
     return [dict(setting=setting, policy=pol, eval_shield=eval_shield, **run_episode(env, policy, s))
             for s in seeds]
@@ -191,6 +201,20 @@ def fmt_md(setting, runs, agg):
     return "\n".join(lines)
 
 
+def mcnemar_md(ep):
+    """Paired exact McNemar test on success vs rule, per training seed (same episodes)."""
+    ref = ep[ep.policy == "rule"].set_index("seed").outcome.eq("success").sort_index()
+    lines = ["Success vs rule, paired exact McNemar per training seed (b = only policy succeeds, "
+             "c = only rule succeeds):", "", "| policy | seed | success % | Δ pts vs rule | b | c | p |", "|---|---|---|---|---|---|---|"]
+    for pol in [p for p in ep.policy.unique() if "|" in p]:
+        x = ep[ep.policy == pol].set_index("seed").outcome.eq("success").sort_index()
+        b, c = int((x & ~ref).sum()), int((~x & ref).sum())
+        p = binomtest(b, b + c, 0.5).pvalue if b + c else 1.0
+        lines.append(f"| {group_name(pol)} | {pol.split('|')[0].rsplit('_s', 1)[1]} | {100 * x.mean():.1f} | "
+                     f"{100 * (x.mean() - ref.mean()):+.1f} | {b} | {c} | {p:.3g} |")
+    return "\n".join(lines + [""])
+
+
 args_seed0 = 5000
 
 
@@ -212,11 +236,11 @@ def main():
     chunks = [seeds[i:i + 25] for i in range(0, len(seeds), 25)]
     for setting in a.settings:
         t0 = time.time()
-        pols = [("rule", False, "mask", None), ("rule+shield", True, "mask", None)]
+        pols = [("rule", False, "mask", None, None), ("rule+shield", True, "mask", None, None)]
         for run, d, _, evals in POLICY_SETS[a.set]:
             p = os.path.join(a.runs_dir, d, "agent.pt")
             pols += [(f"{run}|{ev}", *EVALS[ev], p) for ev in evals]
-        jobs = [(setting, name, sh, mode, p, c) for name, sh, mode, p in pols for c in chunks]
+        jobs = [(setting, name, sh, mode, cap, p, c) for name, sh, mode, cap, p in pols for c in chunks]
         with Pool(a.procs) as pool:
             ep = pd.DataFrame([r for rs in pool.map(_job, jobs, chunksize=1) for r in rs])
         ep.to_csv(os.path.join(a.out, f"episodes_{setting}.csv"), index=False)
@@ -224,7 +248,7 @@ def main():
         agg = aggregate(runs)
         out = pd.concat([runs, agg], ignore_index=True)
         out.to_csv(os.path.join(a.out, f"eval_{setting}.csv"), index=False)
-        block = fmt_md(setting, runs, agg)
+        block = fmt_md(setting, runs, agg) + mcnemar_md(ep)
         open(os.path.join(a.out, f"eval_{setting}.md"), "w").write("# Report 3 deterministic evaluation (simulated)\n\n" + block)
         print(block, flush=True)
         print(f"[{setting}] {len(ep)} episodes in {time.time() - t0:.0f}s", flush=True)
