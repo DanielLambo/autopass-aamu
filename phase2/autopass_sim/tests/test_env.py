@@ -104,3 +104,20 @@ def test_rule_policy_is_safe_on_small_batch(env):
     res = [rollout(env, RulePolicy(), seed=s) for s in range(20)]
     assert sum(r["cost"] for r in res) == 0
     assert sum(r["outcome"] == "success" for r in res) >= 15
+
+
+def test_scan_budget_masks_goto_and_dwell():
+    """Once the sweep budget is spent only COMMIT/REJECT remain, sweeps never exceed the budget,
+    and the rule policy rejects instead of committing without a z-test PASS."""
+    e = AutoPassEnv(scan_budget=12)
+    e.reset(seed=0)
+    term = trunc = False
+    while not e.budget_spent() and not (term or trunc):
+        _, _, term, trunc, _ = e.step(e.A_DWELL)
+    m = e.action_masks()
+    assert e.scans == 12 and not m[:e.A_COMMIT].any() and m[e.A_REJECT:].any()
+    _, _, _, _, info = e.step(e.A_DWELL)                 # masked -> no extra sweep
+    assert info["scans"] == 12
+    for seed in range(20):
+        r = rollout(e, RulePolicy(), seed=seed)
+        assert r["scans"] <= 12 and r["cost"] == 0 and r["outcome"] != "timeout"

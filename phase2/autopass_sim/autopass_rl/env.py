@@ -68,8 +68,10 @@ class AutoPassEnv(gym.Env):
 
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
-                 commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw"):
+                 commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
+                 scan_budget=None):
         self.layouts = list(layouts)
+        self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -187,13 +189,14 @@ class AutoPassEnv(gym.Env):
     # ------------------------------------------------------------------ mask
     def action_masks(self):
         mask = np.zeros(self.n_actions, bool)
-        mask[self.A_DWELL] = True
+        can_scan = not self.budget_spent()
+        mask[self.A_DWELL] = can_scan               # budget spent -> only COMMIT / REJECT remain
         for i, d in enumerate(self.doors):
             if d.id in self.rejected:
                 continue
             for k in range(K):
                 p = self.vp[i, k]
-                mask[i * K + k] = p is not None and np.linalg.norm(p - self.pos) > 0.05
+                mask[i * K + k] = can_scan and p is not None and np.linalg.norm(p - self.pos) > 0.05
             n_trusted = self._fused(d)[3]
             ok = np.isfinite(self.route[i][1]) and (n_trusted > 0 or not self.commit_needs_trusted)
             mask[self.A_COMMIT + i] = ok
@@ -224,8 +227,9 @@ class AutoPassEnv(gym.Env):
             if path is not None and len(path) > 1:
                 pts, s = resample(path, self.cfg.step)
                 for p in pts[1:]:
-                    _observe(self.world, p, self.srng, self.cfg, self.model, self.memory, None)
-                self.scans += len(pts) - 1
+                    if not self.budget_spent():         # walk continues, sweeps stop at the budget
+                        _observe(self.world, p, self.srng, self.cfg, self.model, self.memory, None)
+                        self.scans += 1
                 self.path_len += float(s[-1])
                 self.sim_time += float(s[-1]) / self.cfg.speed
                 self.pos = pts[-1]
@@ -263,9 +267,13 @@ class AutoPassEnv(gym.Env):
             outcome = "timeout"
         return self._obs(), float(reward), terminated, truncated, self._info(outcome, cost)
 
+    def budget_spent(self):
+        return self.scan_budget is not None and self.scans >= self.scan_budget
+
     def _dwell(self):
-        _observe(self.world, self.pos, self.srng, self.cfg, self.model, self.memory, None)
-        self.scans += 1
+        if not self.budget_spent():                 # e.g. a shield-blocked COMMIT after the budget: time only
+            _observe(self.world, self.pos, self.srng, self.cfg, self.model, self.memory, None)
+            self.scans += 1
         self.sim_time += 0.5
 
     # ------------------------------------------------------------------ observation

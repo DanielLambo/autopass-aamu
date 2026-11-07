@@ -26,6 +26,8 @@ class RulePolicy:
             return env.A_COMMIT + i
         if dec == "FAIL":
             return env.A_REJECT + i
+        if not mask[env.A_DWELL]:                   # scan budget spent and no PASS -> reject
+            return env.A_REJECT + i
         a_go = i * K + self.vp
         target = env.vp[i, self.vp]
         if target is not None and np.linalg.norm(target - env.pos) > 0.05 and mask[a_go]:
