@@ -11,7 +11,14 @@ Run (TensorBook, from phase2/autopass_sim):
     python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_s0 --seed 0
     python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_shield_s0 --seed 0 --shield
 """
-import argparse, csv, json, os, time
+import os
+
+# one BLAS/OpenMP thread per process: the env workers are separate processes, so extra threads oversubscribe
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+import argparse, csv, json, time
 import multiprocessing as mp
 import numpy as np
 import torch
