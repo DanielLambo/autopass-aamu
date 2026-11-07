@@ -1,0 +1,15 @@
+group,bin,decisions,mean_trusted_sweeps,ci_lo,ci_hi,commit_frac
+Rule (z-test),0-1,33,25.21,24.48,26.06,0.0
+Rule (z-test),1-2,33,25.7,24.67,26.82,0.0
+Rule (z-test),2-3,34,22.85,19.97,25.24,0.0
+Rule (z-test),3-4,153,10.46,9.2,11.78,0.471
+Rule (z-test),4-6,139,8.68,7.33,10.11,0.453
+Rule (z-test),6-10,34,8.03,6.41,9.74,0.588
+Rule (z-test),≥10,430,5.01,4.78,5.25,1.0
+PPO-Lag v2-A + mask shield (3 seeds),0-1,6,35.0,12.33,63.67,0.0
+PPO-Lag v2-A + mask shield (3 seeds),1-2,6,18.5,9.0,28.33,0.0
+PPO-Lag v2-A + mask shield (3 seeds),2-3,3,7.33,4.0,9.0,0.333
+PPO-Lag v2-A + mask shield (3 seeds),3-4,107,4.84,4.19,5.61,0.972
+PPO-Lag v2-A + mask shield (3 seeds),4-6,186,6.27,5.28,7.49,0.946
+PPO-Lag v2-A + mask shield (3 seeds),6-10,94,6.95,5.76,8.3,0.926
+PPO-Lag v2-A + mask shield (3 seeds),≥10,1396,5.05,4.82,5.36,0.997

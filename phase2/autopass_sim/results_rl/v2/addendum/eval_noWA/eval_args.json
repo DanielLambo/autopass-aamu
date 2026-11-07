@@ -1,0 +1,12 @@
+{
+ "settings": [
+  "main",
+  "uniform"
+ ],
+ "seed0": 5000,
+ "episodes": 600,
+ "runs_dir": "results_rl",
+ "out": "results_rl/v2/addendum/eval_noWA",
+ "procs": 20,
+ "set": "v2nowa"
+}

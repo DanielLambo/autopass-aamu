@@ -113,3 +113,76 @@ correction over the two budget settings is p ≈ 0.087; budget20 p = 0.08-0.17.
 - v3 (per-door dwell cap 20, report3-v3-dwellcap @ `e97e8a4`/`db903e4`) is a recorded negative result.
 - Remaining timeouts (< 1 % of episodes, all safe) are a known limitation; the fix (GOTO cap per door
   or a terminal timeout penalty) is deferred. No further retraining for Report 3.
+
+## Report 3 addendum (2026-11-07, branch report3-v2; all results simulated)
+
+Code: `2763954` (env/ppo_lag `hide_wA`), `09ea1ac` (env `world_seed` + `viewpoints` reset options, evaluate set
+`v2nowa`, tools `fig_margin.py`, `nr_compare.py`, `fig_train_curves.py`, `replay_rl.py`), plus `tools/nowa_compare.py`
+(committed with these results). All new options default off; tests 25 passed; v2-A eval rows reproduce `v2/eval`
+exactly. Existing results were not modified. Outputs in `v2/addendum/`.
+MP4 encoding: `imageio-ffmpeg==0.5.1` installed into `~/venvs/apsim` (env_isaaclab untouched).
+
+### 1. v2-A-noWA: w_A removed from the state
+
+Identical to v2-A (mask shield, budget-aware, 500k steps, --envs 18, --lam-lr 0.5, seeds 0-2) with `--hide-wA`:
+obs feature 4 ((w_A − 76)/10) is set to 0 in training and eval. Script `v2/addendum/run_noWA.sh` ->
+`v2/addendum/A_noWA_s*`. Launched 15:12 CST, finished 17:39 CST, 218 iterations each, no errors,
+0 unsafe in every iteration, λ = 0.
+Eval: `python -m autopass_rl.evaluate --set v2nowa --settings main uniform --out results_rl/v2/addendum/eval_noWA`;
+paired comparison: `python tools/nowa_compare.py` -> `eval_noWA/nowa_vs_v2A.{md,csv}`.
+
+| setting (eval shield on) | noWA success % s0/s1/s2 | v2-A success % s0/s1/s2 | noWA timeouts | v2-A timeouts | unsafe |
+|---|---|---|---|---|---|
+| main | 97.0 / 98.3 / 98.3 (mean 97.9) | 98.3 / 96.7 / 98.3 (97.8) | 11 / 3 / 2 | 3 / 14 / 2 | 0 |
+| uniform | 97.0 / 98.3 / 98.3 (97.9) | 98.3 / 96.3 / 98.2 (97.6) | 12 / 3 / 2 | 3 / 17 / 3 | 0 |
+
+Time vs rule: noWA −1.0 ± 0.1 s (main), v2-A −1.0 ± 0.6 s; paired noWA − v2-A time per seed −0.5 to +0.7 s, all
+Wilcoxon p > 0.15. Per-seed success differences are significant for seeds 0 and 1 (McNemar p < 0.01) but in
+opposite directions and are all timeouts, i.e. which seed hits the known timeout loop, not an effect of w_A.
+Without the shield at eval, noWA has more unsafe commits on seeds 0/1 (27.7 / 26.0 % vs 21.2 / 18.7 %) and
+similar on seed 2 (21.8 vs 22.8 %); the mask shield removes all of them.
+Conclusion: with the shield, hiding w_A makes no consistent difference. Caveat: only the explicit w_A feature is
+hidden; the per-door fused-margin features (measured width − w_A) still carry w_A, so this does not show the
+policy is independent of w_A.
+
+### 2. fig_margin.png: sweeps per door vs |m̂ − w_A| / σ_m
+
+`python tools/fig_margin.py --out results_rl/v2/addendum` (main setting, 600 seeds, rule + v2-A s0-2 with mask
+shield). A decision = COMMIT or REJECT of a door; sweeps = trusted sweeps of that door fused at that moment.
+Decisions with 0 trusted sweeps are excluded (rule 35, v2-A 28 pooled). Table: `fig_margin_table.csv`.
+- Rule: ~25 sweeps for |m̂|/σ < 3 (never commits there; dwells to the cap and flags), ~10.5 at 3-4, ~5 at ≥ 10.
+- v2-A: decides ambiguous doors rarely (15 decisions with |m̂|/σ < 3 over 3 seeds vs 100 for the rule);
+  commits at 3-4 after ~4.8 sweeps (97 % commits). It tends to go to another door instead.
+
+### 3. Report 2's no-repositioning setting
+
+`python tools/nr_compare.py --out results_rl/v2/addendum` -> `nr_table.{md,csv}`, `nr_episodes.csv`.
+Worlds: room + corridor, world seeds 1000-1299 (600), w_A = 81.3 cm, built with Report 2's
+`make_world(default_rng(seed), layout)` and sensor seed `seed*101+7` (env reset option `world_seed`).
+"No repositioning" in the RL env = GOTO limited to viewpoint 0 (square-on commit point). Report 2 planners
+(B2-nr, P-A*(4)-nr, P-A*(4)) rerun with `autopass_sim.experiments` into `report2_rerun/`; matches Report 2's
+committed `results_rev` on 1800/1800 missions (autopass_sim code identical to phase2-sim, so P-A*(4) is comparable).
+
+| policy | success % | unsafe % | time s (all missions) |
+|---|---|---|---|
+| rule, RL env, no reposition | 98.5 | 0 | 28.0 |
+| v2-A s0/s1/s2, no reposition | 98.7 / 97.3 / 98.5 | 0 | 25.4 / 26.5 / 25.8 |
+| v2-A s0/s1/s2, all viewpoints | 99.0 / 97.5 / 98.7 | 0 | 25.9 / 26.6 / 26.5 |
+| P-A*(4)-nr (Report 2) | 98.3 | 0 | 29.0 |
+| B2-nr (Report 2) | 21.5 | 0 | 38.5 |
+| P-A*(4) (Report 2, with repositioning) | 99.7 | 0 | 28.1 |
+
+v2-A vs RL-env rule paired Δtime: −2.5 / −1.5 / −2.2 s (no reposition). Executors differ between the two
+simulators (discrete viewpoints vs planned path), so cross-source time differences are indicative only.
+v2-A s1 has 1.7 % timeouts here (same loop as above).
+
+### 4. Figures
+
+- `fig_train_curves.png` (`python tools/fig_train_curves.py`): return, cost, λ for v2-A and v2-B, mean of
+  3 seeds (10-iteration moving average), min-max band. v2-B cost peaks ~0.24 and falls to ~0.02 as λ rises
+  to ~7; v2-A cost and λ are 0 throughout (mask shield). Return does not penalize unsafe commits.
+- `replay_rule_vs_v2A_5081.{mp4,png}` (`python tools/replay_rl.py --seed 5081 ...`, render2d.Panel +
+  mission.Tracer; v2-A training seed 0). Seed choice rule: lowest main-setting eval seed with 3 doors, a
+  wheelchair, ≥ 1 too-narrow door and both policies succeeding whose Δtime equals the 25th-percentile
+  saving (−10 s). Rule: dwells on door 0 (0.75 cm margin) to the cap, flags it, commits door 1 (35.7 s,
+  45 sweeps); v2-A skips door 0 and commits door 1 (25.7 s, 25 sweeps). Matches the eval CSV.

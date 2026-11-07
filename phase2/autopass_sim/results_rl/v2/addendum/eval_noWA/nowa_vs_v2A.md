@@ -1,0 +1,18 @@
+# v2-A-noWA vs v2-A, paired by training seed (simulated)
+
+600 episodes (seeds 5000-5599), deterministic. b/c = episodes only noWA / only v2-A succeeds; exact McNemar; Δtime paired per episode with Wilcoxon p. noWA zeroes the explicit w_A feature only; the per-door margin features (width − w_A) still carry w_A implicitly.
+
+| setting | eval shield | seed | noWA success % | v2-A success % | noWA unsafe % | v2-A unsafe % | noWA timeout % | v2-A timeout % | b (only noWA) | c (only v2-A) | McNemar p | Δtime_s noWA−v2-A | Wilcoxon p (time) | same outcome % |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| main | True | 0 | 97.0 | 98.3 | 0.0 | 0.0 | 1.8 | 0.5 | 0 | 8 | 0.00781 | -0.08 | 0.669 | 98.3 |
+| main | True | 1 | 98.3 | 96.7 | 0.0 | 0.0 | 0.5 | 2.3 | 10 | 0 | 0.00195 | 0.66 | 0.495 | 98.0 |
+| main | True | 2 | 98.3 | 98.3 | 0.0 | 0.0 | 0.3 | 0.3 | 2 | 2 | 1.0 | -0.49 | 0.162 | 99.2 |
+| main | False | 0 | 71.0 | 78.7 | 27.7 | 21.2 | 1.3 | 0.2 | 5 | 51 | 1.17e-10 | -0.78 | 3.47e-08 | 90.7 |
+| main | False | 1 | 73.8 | 79.7 | 26.0 | 18.7 | 0.2 | 1.7 | 17 | 52 | 2.93e-05 | -0.72 | 4.2e-09 | 88.3 |
+| main | False | 2 | 78.0 | 77.2 | 21.8 | 22.8 | 0.2 | 0.0 | 7 | 2 | 0.18 | 0.45 | 0.0854 | 98.5 |
+| uniform | True | 0 | 97.0 | 98.3 | 0.0 | 0.0 | 2.0 | 0.5 | 0 | 8 | 0.00781 | 0.09 | 0.695 | 98.2 |
+| uniform | True | 1 | 98.3 | 96.3 | 0.0 | 0.0 | 0.5 | 2.8 | 12 | 0 | 0.000488 | 0.72 | 0.281 | 97.7 |
+| uniform | True | 2 | 98.3 | 98.2 | 0.0 | 0.0 | 0.3 | 0.5 | 3 | 2 | 1.0 | -0.19 | 0.753 | 99.0 |
+| uniform | False | 0 | 71.0 | 78.7 | 27.7 | 21.2 | 1.3 | 0.2 | 5 | 51 | 1.17e-10 | -0.81 | 8.3e-08 | 90.7 |
+| uniform | False | 1 | 73.8 | 80.0 | 26.0 | 18.0 | 0.2 | 2.0 | 19 | 56 | 2.24e-05 | -0.88 | 3.97e-11 | 87.3 |
+| uniform | False | 2 | 79.0 | 77.3 | 20.8 | 22.7 | 0.2 | 0.0 | 11 | 1 | 0.00635 | 0.51 | 0.0169 | 98.0 |

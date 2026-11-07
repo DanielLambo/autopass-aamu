@@ -15,3 +15,4 @@ Console logs (`*.log`) are not tracked; `train.csv` holds the same numbers.
 | `v2/eval/`, `v2/run_v2.sh` | **v2 eval tables + fig_main.png (report tables)** | report3-v2 `567501b` |
 | `v3/A_mask_budget_cap20_s*/`, `v3/run_v3.sh` | v3: v2-A + per-door dwell cap 20 (negative result) | report3-v3-dwellcap `e97e8a4` |
 | `v3/eval/` | v3 eval incl. McNemar tables | report3-v3-dwellcap `db903e4` |
+| `v2/addendum/` | **addendum**: v2-A-noWA ablation (`A_noWA_s*`, `eval_noWA/`), fig_margin, no-reposition comparison vs Report 2 (`nr_*`, `report2_rerun/`), training curves, rule vs v2-A replay (PNG + MP4) | report3-v2 `2763954`, `09ea1ac` |
