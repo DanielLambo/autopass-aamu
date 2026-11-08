@@ -29,6 +29,7 @@ ap.add_argument("--settle", type=float, default=1.0, help="s, pause at each view
 ap.add_argument("--fps", type=int, default=25)
 ap.add_argument("--res", type=int, nargs=2, default=(1280, 720))
 ap.add_argument("--tag", default="faithful", help="output name tag")
+ap.add_argument("--keep-open", action="store_true", help="keep the GUI window open after the run (close it to exit)")
 ap.add_argument("--door-straight", action="store_true",
                 help="executor variant: replace the commit path near the door by a straight pass through the door centre (0.5 m before to 0.7 m after the wall); door choice and order unchanged")
 AppLauncher.add_app_launcher_args(ap)
@@ -430,6 +431,10 @@ def main():
     print(json.dumps({k: v for k, v in summary.items() if k not in ("waypoints", "nonfoot_contact_where")}, indent=1, default=float))
     for x in wp_log:
         print(x)
+    if args.keep_open:
+        print("[autopass] run finished; window stays open until you close it")
+        while app.is_running():
+            env.sim.render()
     env.close()
 
 
