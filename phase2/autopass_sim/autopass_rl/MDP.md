@@ -133,3 +133,13 @@ PPO-Lagrangian (`autopass_rl/ppo_lag.py`) with separate reward and cost critics:
 A = (Â_r − λÂ_c)/(1 + λ), λ ← max(0, λ + η_λ(Ĵ_c − d)).
 `SafeAutoPassEnv` returns the safety-gymnasium 6-tuple, so the env can move to OmniSafe
 later if #286 lands or if we switch to a continuous waypoint action.
+
+## 3.12 Changes in v2 (reported method)
+
+- Mask shield (`shield_mode="mask"`): COMMIT(i) is removed from the action mask unless the z-test
+  returns PASS, instead of being replaced by a DWELL after the fact. With it, an unsafe commit is
+  impossible by construction, so the cost and λ stay at 0 during training.
+- Scan budget in the state: two features appended last (budget present, remaining sweeps / 40), 51
+  values in total. Training samples the budget from {none 0.4, 30, 20, 12 sweeps 0.2 each}. v1 agents
+  read the first 49 values.
+- Evaluation settings: `main`, `uniform` (unseen w_A), `budget20`, `budget12`, on seeds 5000-5599.

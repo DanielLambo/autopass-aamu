@@ -1,242 +1,190 @@
-# results_rl run log
+# Report 3 run log
 
-## Pilot s0 runs (old code, position-keyed route cache)
+All runs are simulated. Training is CPU only: `~/venvs/apsim` (Python 3.10, torch CPU), launched with
+`env -u PYTHONPATH PYTHONUNBUFFERED=1` so the ROS 2 Python path does not leak in. Machine: i7-12800H
+(20 threads), 62 GB RAM. Each training run uses 18 env worker processes (14 for the pilots) and one torch
+thread in the learner. Runs in a batch go one after another from a nohup script.
 
-Both runs use the `report3-env` working copy at HEAD `91c1caf` plus one uncommitted change to
-`autopass_rl/env.py`: an A* route cache keyed by (exact position, door), cleared on REJECT.
-The code is identical to `91c1caf` in behaviour: the seeded per-step fingerprint and sanity.json match exactly.
+Evaluation is deterministic (greedy policy) on episode seeds 5000-5599 in four settings: `main`
+(wheelchair or walker), `uniform` (w_A ~ U(66, 92) cm, unseen profiles), `budget20` and `budget12`
+(scan budgets). PPO rows are mean ± std over 3 training seeds.
 
-| | Value |
-|---|---|
-| env.py blob (`git hash-object`) | `d898c322d98b5deccf962b8ba933ae0618d672fc` |
-| `git diff env.py \| sha256sum` (first 16) | `6adef1630ee7648c` |
-| env.py mtime | 2026-11-06 15:17:30 CST |
-| git stash | empty (change is uncommitted in the working tree, not stashed) |
+## v1: environment and first policies (tag `report3-v1`)
 
-| Run | Command | Launched | env.py at launch |
-|---|---|---|---|
-| ppolag_s0 | `ppo_lag --total-steps 500000 --envs 14 --seed 0` | 2026-11-06 15:20:26 CST | blob d898c32 (verified) |
-| ppolag_shield_s0 | `ppo_lag --total-steps 500000 --envs 14 --seed 0 --shield` | 2026-11-06 17:31:20 CST | blob d898c32 (verified) |
+Pilots (`v1/pilots/`, seed 0, 14 envs, λ learning rate 0.05): code `91c1caf` plus an uncommitted A*
+route cache keyed by exact position (env.py blob `d898c32`; same seeded behaviour as `91c1caf`).
 
-ppolag_s0 finished at 2026-11-06 ~17:31 CST: 280 iterations, 501,760 steps, 7,852 s (~64 steps/s), no errors.
+| Run | Iterations | Time |
+|---|---|---|
+| ppolag_s0 | 280 | 7,852 s |
+| ppolag_shield_s0 | 280 | 7,488 s |
+| ppolag_s0_aborted (Isaac training sharing the machine) | 50 | 1,892 s |
 
-Environment: `~/venvs/apsim` (Python 3.10.12, torch 2.14.1 CPU), `env -u PYTHONPATH`, `PYTHONUNBUFFERED=1`,
-no thread env vars. Runs are sequential from one nohup script.
+The unshielded pilot ended at cost ~0.12 against a limit of 0.01, with λ still rising ~0.006 per
+iteration. The full batch therefore uses `--lam-lr 0.5`.
 
-Earlier aborted attempt (same seed, code without the cache, Isaac training sharing the machine) is in
-`pilot_oldcode/ppolag_s0_aborted/` (log `pilot_oldcode/ppolag_s0_aborted.log`, not in git). It was stopped at iteration 50 at ~66 steps/s.
+Full batch, code `4a5c148` (distance-field routes, GOTO path cache), `v1/run_full.sh`:
+500k steps, 18 envs, `--lam-lr 0.5`, seeds 0-2, without and with the post-hoc shield. Six runs,
+218 iterations each, 58-60 min each (2026-11-06 19:37 to 2026-11-07 02:16).
+Outputs: `v1/ppolag_s{0,1,2}/`, `v1/ppolag_shield_s{0,1,2}/`, sanity check `v1/sanity.json`.
 
-## Decision for the full batch (2026-11-06 17:35 CST)
+Eval (`5b34a20`, `v1/eval/`): on `main`, the shield-trained policy with the shield on reaches 98.0 ± 0.3%
+success, 0 unsafe, 1.4 ± 0.3 s faster than the rule. Without the shield the policies make 0.8-1.3% unsafe
+commits.
 
-The unshielded pilot ended at cost ~0.12 (limit 0.01) with λ still rising ~0.006/iteration
-(lam_lr 0.05) and entropy ~0.07. The full batch uses `--lam-lr 0.5` (10x faster λ response). Other
-settings unchanged: 500k steps, --envs 18, seeds 0-2, unshielded and shielded, on the merged
-report3-env (distance-field routes + GOTO path cache).
+## v2: mask shield and budget-aware policy (tag `report3-v2`)
 
-## Full batch (launched 2026-11-06 19:37 CST)
+Code `2ad8d1d`: `shield_mode="mask"` removes COMMIT from the action mask unless the z-test passes (instead
+of replacing it after the fact), and the remaining scan budget is part of the observation (51 values).
+Training samples the budget from {none 0.4, 30/20/12 sweeps 0.2 each}.
 
-Code: report3-env `4a5c148` (distance-field routes + GOTO path cache; ppo_lag thread defaults = 1).
-Script: `results_rl/run_full.sh`. 500k steps, --envs 18, --lam-lr 0.5, seeds 0-2, unshielded then shielded.
-Pilots moved to `pilot_oldcode/` (code: 91c1caf + position-keyed cache, env.py blob d898c32, --lam-lr 0.05, --envs 14).
-`sanity.json` was regenerated on 4a5c148 (rule path 11.97 m; earlier copy had 12.00 m).
+`v2/run_v2.sh`: 500k steps, 18 envs, `--lam-lr 0.5`, seeds 0-2.
+- `v2/A_mask_budget_s*`: `--shield --shield-mode mask --budget-dist` (reported method, "v2-A")
+- `v2/B_noshield_budget_s*`: `--budget-dist`, no shield (Lagrangian only, "v2-B")
 
-Full batch finished 2026-11-07 02:16 CST: all 6 runs reached 218 iterations / 502,272 steps, ~58-60 min each, no errors.
+2026-11-07 02:48 to 07:41, 47-51 min per run. v2-A had 0 unsafe commits in every training iteration.
+v2-B ended at cost 0.019-0.027 with λ ≈ 7.
 
-## Report 3 v2 training (launched 2026-11-07 02:48 CST)
+Eval (`567501b`, `v2/eval/`, figure `v2/eval/fig_main.png`). Rule rows are identical to v1 in all settings.
 
-Branch report3-v2, code commit `2ad8d1d` (shield_mode mask + observable scan budget). Script: `results_rl/v2/run_v2.sh`.
-500k steps, --envs 18, --lam-lr 0.5, seeds 0-2, run sequentially (A then B per seed):
-- A `v2/A_mask_budget_s*`: --shield --shield-mode mask --budget-dist (main method)
-- B `v2/B_noshield_budget_s*`: --budget-dist, no shield (Lagrangian-only ablation)
-budget_dist = {None: .4, 30: .2, 20: .2, 12: .2}. v1 results above are unchanged.
+| setting | policy (shield at eval) | success | unsafe | timeout | time vs rule |
+|---|---|---|---|---|---|
+| main | rule | 97.5% | 0 | 0 | — |
+| main | v2-A (on) | 97.8 ± 1.0% | 0 | 1.1 ± 1.1% | −1.0 ± 0.6 s |
+| main | v2-B (off) | 96.2 ± 0.4% | 0.2 ± 0.2% | 3.6 ± 0.5% | +2.8 ± 0.8 s |
+| budget12 | rule | 30.0% | 0 | 0 | — |
+| budget12 | v2-A (on) | 32.4 ± 0.2% | 0 | 0 | — |
 
-v2 training finished 2026-11-07 07:41 CST: all 6 runs at 218 iterations / 502,272 steps, ~48-51 min each, no errors.
-A (mask shield) runs: 0 unsafe commits in every training iteration. B final cost 0.019-0.027, λ ≈ 7.
-v2 eval: `python -m autopass_rl.evaluate --set v2 --settings main uniform budget20 budget12 --out results_rl/v2/eval`
-(same seeds 5000-5599; rule rows byte-identical to v1 eval in all 4 settings).
+Success against the rule, paired exact McNemar per training seed (b = only the policy succeeds,
+c = only the rule succeeds), shield on:
 
-## Report 3 v3 training (launched 2026-11-07 11:28 CST)
+| policy | setting | seed 0: Δ, b/c, p | seed 1 | seed 2 |
+|---|---|---|---|---|
+| v2-A | budget20 | +2.7, 46/30, 0.085 | +2.0, 38/26, 0.17 | +2.3, 45/31, 0.14 |
+| v2-A | budget12 | +2.7, 28/12, 0.017 | +2.3, 24/10, 0.024 | +2.3, 28/14, 0.044 |
 
-Branch report3-v3-dwellcap (renamed from report3-v3), code commit `e97e8a4` (per-door dwell cap). Script: `results_rl/v3/run_v3.sh`.
-Variant A only (the v2 timeouts were in A): --shield --shield-mode mask --budget-dist --dwell-cap 20,
-500k steps, --envs 18, --lam-lr 0.5, seeds 0-2 -> `v3/A_mask_budget_cap20_s*`. v1/v2 results unchanged.
-Gate before launch: rule with dwell_cap=20 identical to v2 rule on seeds 5000-5599 in all 4 eval settings.
+Not a claimable success gain: budget12 is p < 0.05 for each seed alone, but the worst seed after Holm
+correction over the two budget settings is p ≈ 0.087.
 
-v3 training finished 2026-11-07 13:51 CST: 3 runs at 218 iterations / 502,272 steps, ~47-49 min each, no errors,
-0 unsafe commits in every iteration, λ = 0 throughout.
-v3 eval: code `db903e4` on report3-v3-dwellcap,
-`python -m autopass_rl.evaluate --set v3 --settings main uniform budget20 budget12 --out results_rl/v3/eval`.
-v3 policies are evaluated with dwell_cap=20; v2-A and v1 rows are evaluated as before (no cap).
+## v3: per-door dwell cap (tag `report3-v3-dwellcap`, negative result)
 
-### v3 result: negative (not used in the report tables)
+Goal: remove v2-A's leftover timeouts (mostly seed 1, 14/600 on `main`). Code `e97e8a4` adds `--dwell-cap 20`.
+Before launch, the rule with the cap was checked to be identical to the uncapped rule on all 600 seeds in all
+four settings. A first version that charged dwells to the nearest door changed the rule on seeds 5294 and
+5509, so dwells are counted at the door whose viewpoint the robot stands at.
 
-Timeouts with the mask shield on at eval (out of 600 episodes per training seed):
+`v3/run_v3.sh`: v2-A settings plus the cap, seeds 0-2, 2026-11-07 11:28 to 13:51, 47-49 min per run,
+0 unsafe in every iteration. Eval code `db903e4`, `v3/eval/`.
 
-| setting | v2-A seeds 0/1/2 | v3-A seeds 0/1/2 |
+Timeouts with the shield on, out of 600 episodes:
+
+| setting | v2-A seeds 0/1/2 | v3 seeds 0/1/2 |
 |---|---|---|
 | main | 3 / 14 / 2 | 5 / 5 / 5 |
 | uniform | 3 / 17 / 3 | 5 / 6 / 4 |
-| budget20 | 0 / 0 / 0 | 0 / 0 / 0 |
-| budget12 | 0 / 0 / 0 | 0 / 0 / 0 |
+| budget20, budget12 | 0 | 0 |
 
-The cap removed seed 1's outlier but not the timeouts. Cause (traced on main seeds 5039, 5222, 5226):
-the v3 greedy policy never dwells (door dwell counts stay 0); it walks back and forth between two
-viewpoints of one door, scanning while walking, until the 80-step limit, e.g. for seed 5222:
+The cap removed seed 1's outlier but not the timeouts. On seeds 5039, 5222 and 5226 the v3 policy never
+dwells; it walks back and forth between two viewpoints of one door until the 80-step limit, scanning on
+the way. A dwell-only cap cannot bound that. v2-A loops by dwelling instead (~78 DWELLs on a door that
+never reaches PASS). v3 is not used in the report. The timeouts (< 1% of episodes, all safe) stay a known
+limitation; a GOTO cap per door or a timeout penalty would be the next fix.
 
-    g(0,0) g(0,3) g(0,0) g(0,3) ... (80 steps; ztests FLAG/FLAG)
+## Addendum (tag `report3-v2`, folder `v2/addendum/`)
 
-where g(i,k) = GOTO door i, viewpoint k. The v2 policy loops by dwelling instead (~78 DWELLs in a row on
-a door that never reaches PASS). A DWELL-only cap cannot bound walking sweeps.
+Code `2763954` (`--hide-wA`) and `09ea1ac` (env options `world_seed` and `viewpoints`, eval set `v2nowa`,
+tools `fig_margin.py`, `nr_compare.py`, `fig_train_curves.py`, `replay_rl.py`, `nowa_compare.py`). New options
+are off by default; tests pass and the v2-A eval rows reproduce `v2/eval` exactly.
 
-Cap design notes: a nearest-door attribution was tried first and changed the rule on 2/600 seeds
-(5294, 5509: dwells for the route-first door were charged to a closer door); the committed version
-counts DWELLs at a door's viewpoints plus consecutive DWELLs at other stops, and leaves the rule
-identical on all 600 seeds in all 4 settings.
+**v2-A without w_A in the state.** Same as v2-A with the w_A feature set to 0 in training and eval
+(`v2/addendum/run_noWA.sh`, `A_noWA_s*`, 2026-11-07 15:12 to 17:39, 0 unsafe in every iteration).
+Eval: `python -m autopass_rl.evaluate --set v2nowa --settings main uniform --out results_rl/v2/addendum/eval_noWA`,
+paired comparison `python tools/nowa_compare.py` (`eval_noWA/nowa_vs_v2A.md`).
 
-### Success under scan budgets: paired exact McNemar vs rule (mask shield on)
-
-b = episodes only the policy succeeds, c = only the rule succeeds.
-
-| policy (mask shield on at eval) | setting | seed 0: Δpts, b/c, p | seed 1 | seed 2 |
+| setting (shield on) | noWA success s0/s1/s2 | v2-A success s0/s1/s2 | noWA timeouts | v2-A timeouts |
 |---|---|---|---|---|
-| v2-A | budget20 | +2.7, 46/30, p=0.0846 | +2.0, 38/26, p=0.169 | +2.3, 45/31, p=0.135 |
-| v2-A | budget12 | +2.7, 28/12, p=0.0166 | +2.3, 24/10, p=0.0243 | +2.3, 28/14, p=0.0436 |
-| v3-A (dwell cap 20) | budget20 | +2.2, 44/31, p=0.165 | +1.8, 43/32, p=0.248 | +2.3, 43/29, p=0.125 |
-| v3-A (dwell cap 20) | budget12 | +1.8, 27/16, p=0.126 | +1.3, 24/16, p=0.268 | +2.7, 28/12, p=0.0166 |
+| main | 97.0 / 98.3 / 98.3 (mean 97.9) | 98.3 / 96.7 / 98.3 (97.8) | 11 / 3 / 2 | 3 / 14 / 2 |
+| uniform | 97.0 / 98.3 / 98.3 (97.9) | 98.3 / 96.3 / 98.2 (97.6) | 12 / 3 / 2 | 3 / 17 / 3 |
 
-No claimable success gain. v2-A budget12 is p < 0.05 for each seed alone, but the worst seed after Holm
-correction over the two budget settings is p ≈ 0.087; budget20 p = 0.08-0.17.
+Both have 0 unsafe with the shield. Time vs the rule is −1.0 s for both on `main`; paired noWA − v2-A time per
+seed is −0.5 to +0.7 s (Wilcoxon p > 0.15). Seeds 0 and 1 differ in success (McNemar p < 0.01) but in opposite
+directions, and every differing episode is a timeout. Without the shield, noWA makes more unsafe commits on
+seeds 0 and 1 (27.7 / 26.0% vs 21.2 / 18.7%). Only the explicit w_A feature is hidden: the per-door margin
+features (width − w_A) still carry it, so this does not show the policy works without knowing w_A.
 
-## Decisions (2026-11-07)
+**Sweeps per door vs normalized margin** (`fig_margin.png`, `python tools/fig_margin.py`; `main`, rule and
+v2-A seeds 0-2). A decision is a COMMIT or REJECT; sweeps are the door's trusted sweeps at that moment.
+Decisions with no trusted sweep are left out (rule 35, v2-A 28).
+- Rule: ~25 sweeps for |m̂|/σ < 3 (it never commits there; it dwells to the cap and flags), ~10.5 at 3-4,
+  ~5 at ≥ 10.
+- v2-A: 15 decisions with |m̂|/σ < 3 over three seeds, against 100 for the rule. At 3-4 it commits after
+  ~4.8 sweeps (97% commits). It moves to another door instead of dwelling on an ambiguous one.
 
-- Reported method: v2-A (mask shield + budget-aware), branch report3-v2 @ `567501b`.
-- v3 (per-door dwell cap 20, report3-v3-dwellcap @ `e97e8a4`/`db903e4`) is a recorded negative result.
-- Remaining timeouts (< 1 % of episodes, all safe) are a known limitation; the fix (GOTO cap per door
-  or a terminal timeout penalty) is deferred. No further retraining for Report 3.
+**No-repositioning setting** (`python tools/nr_compare.py`, `nr_table.md`). Report 2's worlds: room +
+corridor, world seeds 1000-1299, w_A = 81.3 cm, built with Report 2's `make_world` and sensor seed. No
+repositioning in the RL env means GOTO only to viewpoint 0. Report 2's planners were rerun from the same
+code into `report2_rerun/` and match the committed Report 2 results on 1800/1800 missions.
 
-## Report 3 addendum (2026-11-07, branch report3-v2; all results simulated)
-
-Code: `2763954` (env/ppo_lag `hide_wA`), `09ea1ac` (env `world_seed` + `viewpoints` reset options, evaluate set
-`v2nowa`, tools `fig_margin.py`, `nr_compare.py`, `fig_train_curves.py`, `replay_rl.py`), plus `tools/nowa_compare.py`
-(committed with these results). All new options default off; tests 25 passed; v2-A eval rows reproduce `v2/eval`
-exactly. Existing results were not modified. Outputs in `v2/addendum/`.
-MP4 encoding: `imageio-ffmpeg==0.5.1` installed into `~/venvs/apsim` (env_isaaclab untouched).
-
-### 1. v2-A-noWA: w_A removed from the state
-
-Identical to v2-A (mask shield, budget-aware, 500k steps, --envs 18, --lam-lr 0.5, seeds 0-2) with `--hide-wA`:
-obs feature 4 ((w_A − 76)/10) is set to 0 in training and eval. Script `v2/addendum/run_noWA.sh` ->
-`v2/addendum/A_noWA_s*`. Launched 15:12 CST, finished 17:39 CST, 218 iterations each, no errors,
-0 unsafe in every iteration, λ = 0.
-Eval: `python -m autopass_rl.evaluate --set v2nowa --settings main uniform --out results_rl/v2/addendum/eval_noWA`;
-paired comparison: `python tools/nowa_compare.py` -> `eval_noWA/nowa_vs_v2A.{md,csv}`.
-
-| setting (eval shield on) | noWA success % s0/s1/s2 | v2-A success % s0/s1/s2 | noWA timeouts | v2-A timeouts | unsafe |
-|---|---|---|---|---|---|
-| main | 97.0 / 98.3 / 98.3 (mean 97.9) | 98.3 / 96.7 / 98.3 (97.8) | 11 / 3 / 2 | 3 / 14 / 2 | 0 |
-| uniform | 97.0 / 98.3 / 98.3 (97.9) | 98.3 / 96.3 / 98.2 (97.6) | 12 / 3 / 2 | 3 / 17 / 3 | 0 |
-
-Time vs rule: noWA −1.0 ± 0.1 s (main), v2-A −1.0 ± 0.6 s; paired noWA − v2-A time per seed −0.5 to +0.7 s, all
-Wilcoxon p > 0.15. Per-seed success differences are significant for seeds 0 and 1 (McNemar p < 0.01) but in
-opposite directions and are all timeouts, i.e. which seed hits the known timeout loop, not an effect of w_A.
-Without the shield at eval, noWA has more unsafe commits on seeds 0/1 (27.7 / 26.0 % vs 21.2 / 18.7 %) and
-similar on seed 2 (21.8 vs 22.8 %); the mask shield removes all of them.
-Conclusion: with the shield, hiding w_A makes no consistent difference. Caveat: only the explicit w_A feature is
-hidden; the per-door fused-margin features (measured width − w_A) still carry w_A, so this does not show the
-policy is independent of w_A.
-
-### 2. fig_margin.png: sweeps per door vs |m̂ − w_A| / σ_m
-
-`python tools/fig_margin.py --out results_rl/v2/addendum` (main setting, 600 seeds, rule + v2-A s0-2 with mask
-shield). A decision = COMMIT or REJECT of a door; sweeps = trusted sweeps of that door fused at that moment.
-Decisions with 0 trusted sweeps are excluded (rule 35, v2-A 28 pooled). Table: `fig_margin_table.csv`.
-- Rule: ~25 sweeps for |m̂|/σ < 3 (never commits there; dwells to the cap and flags), ~10.5 at 3-4, ~5 at ≥ 10.
-- v2-A: decides ambiguous doors rarely (15 decisions with |m̂|/σ < 3 over 3 seeds vs 100 for the rule);
-  commits at 3-4 after ~4.8 sweeps (97 % commits). It tends to go to another door instead.
-
-### 3. Report 2's no-repositioning setting
-
-`python tools/nr_compare.py --out results_rl/v2/addendum` -> `nr_table.{md,csv}`, `nr_episodes.csv`.
-Worlds: room + corridor, world seeds 1000-1299 (600), w_A = 81.3 cm, built with Report 2's
-`make_world(default_rng(seed), layout)` and sensor seed `seed*101+7` (env reset option `world_seed`).
-"No repositioning" in the RL env = GOTO limited to viewpoint 0 (square-on commit point). Report 2 planners
-(B2-nr, P-A*(4)-nr, P-A*(4)) rerun with `autopass_sim.experiments` into `report2_rerun/`; matches Report 2's
-committed `results_rev` on 1800/1800 missions (autopass_sim code identical to phase2-sim, so P-A*(4) is comparable).
-
-| policy | success % | unsafe % | time s (all missions) |
+| policy | success | unsafe | time, all missions |
 |---|---|---|---|
-| rule, RL env, no reposition | 98.5 | 0 | 28.0 |
-| v2-A s0/s1/s2, no reposition | 98.7 / 97.3 / 98.5 | 0 | 25.4 / 26.5 / 25.8 |
-| v2-A s0/s1/s2, all viewpoints | 99.0 / 97.5 / 98.7 | 0 | 25.9 / 26.6 / 26.5 |
-| P-A*(4)-nr (Report 2) | 98.3 | 0 | 29.0 |
-| B2-nr (Report 2) | 21.5 | 0 | 38.5 |
-| P-A*(4) (Report 2, with repositioning) | 99.7 | 0 | 28.1 |
+| rule, RL env, no reposition | 98.5% | 0 | 28.0 s |
+| v2-A s0/s1/s2, no reposition | 98.7 / 97.3 / 98.5% | 0 | 25.4 / 26.5 / 25.8 s |
+| v2-A s0/s1/s2, all viewpoints | 99.0 / 97.5 / 98.7% | 0 | 25.9 / 26.6 / 26.5 s |
+| P-A*(4)-nr (Report 2) | 98.3% | 0 | 29.0 s |
+| B2-nr (Report 2) | 21.5% | 0 | 38.5 s |
+| P-A*(4) (Report 2, repositioning) | 99.7% | 0 | 28.1 s |
 
-v2-A vs RL-env rule paired Δtime: −2.5 / −1.5 / −2.2 s (no reposition). Executors differ between the two
-simulators (discrete viewpoints vs planned path), so cross-source time differences are indicative only.
-v2-A s1 has 1.7 % timeouts here (same loop as above).
+Paired against the RL-env rule, v2-A saves 2.5 / 1.5 / 2.2 s. The two simulators execute paths differently
+(discrete viewpoints vs a planned path with a 1.2 m commit point), so cross-simulator times are indicative.
 
-### 4. Figures
+**Training curves** (`fig_train_curves.png`): return, cost and λ for v2-A and v2-B, mean of three seeds with
+a min-max band. v2-B's cost peaks at ~0.24 and falls to ~0.02 as λ rises to ~7. v2-A's cost and λ stay at 0.
+The return does not penalize unsafe commits, so v2-B's higher return includes unsafe ones.
 
-- `fig_train_curves.png` (`python tools/fig_train_curves.py`): return, cost, λ for v2-A and v2-B, mean of
-  3 seeds (10-iteration moving average), min-max band. v2-B cost peaks ~0.24 and falls to ~0.02 as λ rises
-  to ~7; v2-A cost and λ are 0 throughout (mask shield). Return does not penalize unsafe commits.
-- `replay_rule_vs_v2A_5081.{mp4,png}` (`python tools/replay_rl.py --seed 5081 ...`, render2d.Panel +
-  mission.Tracer; v2-A training seed 0). Seed choice rule: lowest main-setting eval seed with 3 doors, a
-  wheelchair, ≥ 1 too-narrow door and both policies succeeding whose Δtime equals the 25th-percentile
-  saving (−10 s). Rule: dwells on door 0 (0.75 cm margin) to the cap, flags it, commits door 1 (35.7 s,
-  45 sweeps); v2-A skips door 0 and commits door 1 (25.7 s, 25 sweeps). Matches the eval CSV.
+**Replay** (`replay_rule_vs_v2A_5081.{mp4,png}`, `python tools/replay_rl.py --seed 5081`). The world is the
+lowest `main` seed with 3 doors, a wheelchair, at least one too-narrow door and both policies succeeding,
+whose time difference equals the 25th-percentile saving (−10 s). The rule dwells on door 0 (margin +0.75 cm)
+to the cap, flags it and goes through door 1 (35.7 s, 45 sweeps). v2-A skips door 0 and goes through door 1
+(25.7 s, 25 sweeps). Both match the eval CSV. MP4 encoding uses `imageio-ffmpeg` in the apsim venv.
 
-## Report 3 GUI check: frozen Go2 policy executes v2-A's plan in Isaac Lab (2026-11-07, branch report3-gui; simulated)
+## Isaac Lab check (tag `report3-gui`, folder `gui/`)
 
-Branch report3-gui off report3-v2 @ `f62791c`; no existing results changed. Outputs in `gui/` (this folder's `gui/`,
-code in `../gui/`). Everything here is simulated (Isaac Sim 5.1 / Isaac Lab 2.3, env_isaaclab used as is, nothing installed).
+Does the trained Go2 walking policy carry out v2-A's plan? Isaac Sim 5.1 / Isaac Lab 2.3 (conda env
+`env_isaaclab`), GUI on, RTX 3080 Ti Laptop GPU.
 
-**Plan export** (`python gui/export_plan.py --seed 5081 --out results_rl/gui/plan_5081.json`, apsim venv): the same
-world as the 2D replay (main setting, episode seed 5081, corridor layout, 3 doors with margins +0.75 / +8.90 / −0.37 cm
-for w_A 81.3 cm), v2-A training seed 0, mask shield, greedy. Exported geometry (walls, door centres, true clear
-widths, stop/rabbet profile, furniture footprints, start, goal) and the exact env paths. v2-A's episode is 3 steps:
-GOTO door 0 viewpoint 0, GOTO door 1 viewpoint 0, COMMIT door 1 (z-test PASS, fused margin +8.7 ± 0.5 cm);
-env time 25.7 s, 25 sweeps, all taken while walking (0 DWELL actions). Matches the 2D replay and the eval CSV.
+Plan (`gui/export_plan.py`): world 5081 from the replay (corridor, door margins +0.75 / +8.90 / −0.37 cm),
+v2-A seed 0 with the mask shield. Three actions: GOTO door 0 viewpoint 0, GOTO door 1 viewpoint 0, COMMIT
+door 1 (z-test PASS, fused margin +8.7 ± 0.5 cm). 25.7 s and 25 sweeps in the RL env, all taken while
+walking (no DWELL).
 
-**Isaac Lab run** (`gui/isaac_go2_plan.py`, GUI on DISPLAY :0, not headless):
-- Scene: flat ground plane; door wall 2.4 m high with openings at the soffit width plus door stops, so the clear
-  width is the true stop-to-stop width; lintels from 2.03 m; outer walls 1.0 m high (kept low for the cameras);
-  furniture as 0.75 m boxes (height assumed, not in the 2D world); all static colliders. Visual-only floor strips:
-  door margin colour, viewpoints, goal.
-- Robot: Unitree-Go2-Velocity play config, 1 env, frozen `model_800.pt` loaded with rsl_rl's OnPolicyRunner;
-  observation noise, pushes, mass/friction randomisation off.
-- Controller: pure pursuit (lookahead 0.25 m, vx ≤ 0.5 m/s = env speed, |wz| ≤ 1 rad/s) writes the velocity
-  command; arrival tolerance 0.10 m (viewpoints) / 0.15 m (goal). At each viewpoint the robot turns to face the door
-  and holds 1.0 s (settle pause; v2-A's plan has 0 dwell time).
-- Logged every control step (50 Hz): pose, tilt, commands, max contact force on non-foot links, and 2D clearance of
-  all link origins to collider footprints (lintels excluded).
+Scene (`gui/isaac_go2_plan.py`): flat ground; 2.4 m door wall with openings at the soffit width plus the
+door stops, so the clear width equals the true width; lintels from 2.03 m; 1.0 m outer walls (kept low for
+the cameras); furniture as 0.75 m boxes (the 2D world has no heights). Thin floor strips mark each door's
+margin (yellow 0-3 cm, green ≥ 3 cm, red < 0), the viewpoints (blue) and the goal; they have no collision.
 
-Two executions of the same decisions:
-- `faithful`: the plan's paths followed as given.
-- `straight` (`--door-straight`): executor variant; the commit path near the door is replaced by a straight pass
-  through the door centre from 0.5 m before to 0.7 m after the wall, then the plan's remaining waypoints. Door choice,
-  order and commit are unchanged.
+Robot: Unitree-Go2-Velocity from unitree_rl_lab, checkpoint `model_800.pt`, one env, no observation noise,
+pushes or randomization. A pure-pursuit controller (lookahead 0.25 m, vx ≤ 0.5 m/s, |wz| ≤ 1 rad/s) writes
+the velocity command. At each viewpoint the robot turns to face the door and stands for 1 s; this pause is
+not in v2-A's plan. Logged at 50 Hz: pose, tilt, contact force on non-foot links, and clearance from each
+link origin to the nearest wall or furniture footprint.
 
-| run | all waypoints reached | fall | max tilt | non-foot contacts | min link clearance | final pos error | time (env plan 25.7 s) |
+Two runs of the same decisions:
+- `faithful`: the RL env's paths as given.
+- `straight` (`--door-straight`): the commit path near the door replaced by a straight pass through the door
+  centre from 0.5 m before to 0.7 m after the wall, then the rest of the plan.
+
+| run | waypoints reached | fall | max tilt | non-foot contacts | min clearance | final error | time |
 |---|---|---|---|---|---|---|---|
-| faithful | yes (5/5) | no | 3.9° | **11 steps, door 1 frame, max 364 N (RL_hip, FL_calf)** | 0.013 m | 0.149 m | 36.1 s |
-| straight | yes (6/6) | no | 3.9° | 0 | 0.258 m | 0.147 m | 36.8 s |
+| faithful | 5/5 | no | 3.9° | 11 steps on door 1's frame, max 364 N (RL_hip, FL_calf) | 0.013 m | 0.149 m | 36.1 s |
+| straight | 6/6 | no | 3.9° | 0 | 0.258 m | 0.147 m | 36.8 s |
 
-Viewpoint arrival errors 0.098 / 0.099 m in both runs. Run time includes 2 × (turn to door + 1 s pause) ≈ 6-7 s
-and slower turns than the env's constant 0.5 m/s.
+The env plans for a point with 0.2 m of inflation. On this world its commit path crosses the wall 0.27 m left
+of the door centre and turns ~60° about 0.1 m past it, so the Go2's rear hip clips the frame. Walking straight
+through the door centre before turning avoids it. The decisions are unaffected; the env needs the robot's
+footprint. Run time is longer than the env's 25.7 s because of the two turn-and-wait stops and slower turns.
 
-Finding: the frozen Go2 policy walks v2-A's plan without falling, but the RL env's commit path is not
-collision-free for the Go2 body. The env plans for a point with 0.2 m grid inflation; on seed 5081 the commit path
-crosses the wall 0.27 m left of the door centre and turns ~60° left about 0.1 m past the wall, so the rear hip clips
-the door frame. A straight pass through the door centre before turning removes the contact. The RL env's decisions
-are not affected; this is an executor/footprint issue for deployment (rule for hardware: centre the door crossing and
-go straight ≥ 0.5 m past the wall).
-
-Outputs (`results_rl/gui/`): `plan_5081.json`; `go2_v2A_5081_{faithful,straight}.mp4` (follow cam, 25 fps,
-36 s / 37 s, label "Simulated — Isaac Lab, frozen Go2 policy"); `shot_{faithful,straight}_{overview,at_viewpoint,
-at_commit_door,through_door}.png`; `trajectory_{tag}.csv`; `walkability_{tag}.json`; `walk_paths_5081.png`
-(`python gui/plot_walk.py`). Console logs `isaac_run_*.log` are not tracked.
-Notes: the ground shows Isaac's default grid (the plane terrain ignores the custom floor colour). PhysX on GPU is not
-bit-reproducible between runs: the straight variant was rerun after a blank overview frame (viewport warm-up, now
-retried) and gave 36.8 s vs 37.1 s with the same contacts (0), clearance (0.258 vs 0.257 m) and errors.
+Outputs: `plan_5081.json`, `go2_v2A_5081_{faithful,straight}.mp4` (25 fps, ~36 s),
+`shot_{faithful,straight}_{overview,at_viewpoint,at_commit_door,through_door}.png`,
+`trajectory_*.csv`, `walkability_*.json`, `walk_paths_5081.png` (`python gui/plot_walk.py`).
+GPU PhysX is not bit-reproducible: rerunning `straight` gave 36.8 s instead of 37.1 s with the same contacts
+and clearance.
