@@ -1,7 +1,7 @@
 """Env sanity check: random vs rule policy, shielded and unshielded, plus a determinism check.
 
 Run (TensorBook, from phase2/autopass_sim):
-    python tools/sanity_env.py --episodes 200 --out results_rl/sanity.json
+    python tools/sanity_env.py --episodes 200 --out results_rl/v1/sanity.json
 """
 import argparse, hashlib, json, os, sys, time
 from multiprocessing import Pool
@@ -55,7 +55,7 @@ def main():
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--seed0", type=int, default=5000)
     ap.add_argument("--procs", type=int, default=os.cpu_count())
-    ap.add_argument("--out", default="results_rl/sanity.json")
+    ap.add_argument("--out", default="results_rl/v1/sanity.json")
     a = ap.parse_args()
     jobs = [(n, a.seed0 + i) for n in SETTINGS for i in range(a.episodes)]
     t0 = time.time()

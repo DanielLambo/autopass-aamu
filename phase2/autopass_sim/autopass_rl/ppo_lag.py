@@ -8,8 +8,8 @@ Lagrangian: policy uses A = (A_r - lam * A_c) / (1 + lam);  lam <- max(0, lam + 
 This bounds the EXPECTED cost only. Use --shield to make COMMIT require a z-test PASS.
 
 Run (TensorBook, from phase2/autopass_sim):
-    python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_s0 --seed 0
-    python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/ppolag_shield_s0 --seed 0 --shield
+    python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/v1/ppolag_s0 --seed 0
+    python -m autopass_rl.ppo_lag --total-steps 500000 --envs 18 --out results_rl/v1/ppolag_shield_s0 --seed 0 --shield
 """
 import os
 

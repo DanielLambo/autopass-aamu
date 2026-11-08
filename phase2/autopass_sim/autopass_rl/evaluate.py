@@ -45,13 +45,13 @@ EVAL_LABEL = {"eval_noshield": "eval no shield", "eval_shield": "eval shield", "
               "eval_noshield_nowa": "eval no shield", "eval_shield_nowa": "eval shield"}
 V1_EVALS = ("eval_noshield", "eval_postshield")
 POLICY_SETS = {
-    "v1": [(f"ppolag_s{s}", f"ppolag_s{s}", "PPO-Lag", V1_EVALS) for s in range(3)] +
-          [(f"ppolag_shield_s{s}", f"ppolag_shield_s{s}", "PPO-Lag(train shield)", V1_EVALS) for s in range(3)],
+    "v1": [(f"ppolag_s{s}", f"v1/ppolag_s{s}", "PPO-Lag", V1_EVALS) for s in range(3)] +
+          [(f"ppolag_shield_s{s}", f"v1/ppolag_shield_s{s}", "PPO-Lag(train shield)", V1_EVALS) for s in range(3)],
     "v2": [(f"A_mask_budget_s{s}", f"v2/A_mask_budget_s{s}", "v2 PPO-Lag(mask shield + budget)",
             ("eval_noshield", "eval_shield")) for s in range(3)] +
           [(f"B_noshield_budget_s{s}", f"v2/B_noshield_budget_s{s}", "v2 PPO-Lag(no shield + budget)",
             ("eval_noshield", "eval_shield")) for s in range(3)] +
-          [(f"v1_ppolag_shield_s{s}", f"ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
+          [(f"v1_ppolag_shield_s{s}", f"v1/ppolag_shield_s{s}", "v1 PPO-Lag(train shield, post shield)",
             ("eval_postshield",)) for s in range(3)],
     # addendum: v2-A with the w_A feature zeroed (agent and eval env both hide it)
     "v2nowa": [(f"A_noWA_s{s}", f"v2/addendum/A_noWA_s{s}", "v2-A-noWA (w_A hidden)",
@@ -221,7 +221,7 @@ def main():
     ap.add_argument("--seed0", type=int, default=5000)
     ap.add_argument("--episodes", type=int, default=600)
     ap.add_argument("--runs-dir", default="results_rl")
-    ap.add_argument("--out", default="results_rl/eval")
+    ap.add_argument("--out", default="results_rl/v1/eval")
     ap.add_argument("--procs", type=int, default=os.cpu_count())
     ap.add_argument("--set", default="v1", choices=list(POLICY_SETS))
     a = ap.parse_args()

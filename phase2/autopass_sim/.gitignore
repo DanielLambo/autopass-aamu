@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+results_tb_check/
+results_rl/v3/eval_run.txt

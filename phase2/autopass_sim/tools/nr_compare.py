@@ -85,7 +85,7 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
-    # Report 2 planners on the same worlds (same code as phase2-sim), checked against results_rev
+    # Report 2 planners on the same worlds (same code as the report2 tag), checked against results_rev
     r2dir = os.path.join(a.out, "report2_rerun")
     if not a.reuse:
         subprocess.run([sys.executable, "-m", "autopass_sim.experiments", "--worlds", "300", "--rrt-worlds", "0",

@@ -11,7 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--dir", default="results_rl/eval")
+ap.add_argument("--dir", default="results_rl/v1/eval")
 ap.add_argument("--ppo", default=r"ppolag_shield_s\d\|eval_shield", help="regex for the PPO-Lag + shield policies")
 ap.add_argument("--ppo-label", default="PPO-Lag + shield\n(trained & evaluated with shield, 3 seeds)")
 ap.add_argument("--title", default="Report 3 deterministic evaluation, simulated (600 fixed seeds per policy and setting)")
