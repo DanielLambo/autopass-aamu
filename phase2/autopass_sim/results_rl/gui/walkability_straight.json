@@ -1,0 +1,156 @@
+{
+ "label": "simulated (Isaac Lab sim-to-sim walkability check; not robot data)",
+ "plan": "results_rl/gui/plan_5081.json",
+ "checkpoint": "/home/aamu/sim/unitree_rl_lab/logs/rsl_rl/unitree_go2_velocity/2026-11-06_14-31-38/model_800.pt",
+ "isaac_task": "Unitree-Go2-Velocity",
+ "gui": true,
+ "settings": {
+  "vmax": 0.5,
+  "settle_s": 1.0,
+  "physics_dt": 0.005,
+  "control_dt": 0.02,
+  "obs_noise": false,
+  "pushes": false,
+  "outer_wall_h": 1.0,
+  "door_wall_h": 2.4,
+  "furniture_h": 0.75
+ },
+ "all_waypoints_reached": true,
+ "fell": false,
+ "max_tilt_deg": 3.93,
+ "min_base_height_m": 0.3179999887943268,
+ "tag": "straight",
+ "door_straight": true,
+ "nonfoot_contact_steps": 0,
+ "nonfoot_contact_bodies": [],
+ "nonfoot_contact_where": [],
+ "max_nonfoot_contact_N": 0.0,
+ "min_body_clearance_m": 0.258,
+ "min_body_clearance_note": "2D distance from any Go2 link origin to the nearest collider footprint",
+ "final_position_error_m": 0.147,
+ "run_time_s": 36.82,
+ "env_plan_time_s": 25.7,
+ "video_frames": 920,
+ "video_fps": 25,
+ "screenshots": {
+  "overview": 1.0,
+  "at_viewpoint": 10.54,
+  "at_commit_door": 22.98,
+  "through_door": 27.18
+ },
+ "waypoints": [
+  {
+   "step": 1,
+   "kind": "viewpoint",
+   "door": 0,
+   "viewpoint": 0,
+   "target": [
+    3.8713,
+    1.2
+   ],
+   "reached": true,
+   "pos_error_m": 0.1,
+   "t_arrive": 6.76,
+   "walk_time_s": 6.76,
+   "env_walk_time_s": 6.131
+  },
+  {
+   "step": 2,
+   "kind": "viewpoint",
+   "door": 1,
+   "viewpoint": 0,
+   "target": [
+    6.5797,
+    1.2
+   ],
+   "reached": true,
+   "pos_error_m": 0.099,
+   "t_arrive": 16.44,
+   "walk_time_s": 6.9,
+   "env_walk_time_s": 5.417
+  },
+  {
+   "step": 3,
+   "kind": "commit waypoint 1",
+   "target": [
+    6.579677760336278,
+    1.9
+   ],
+   "reached": true,
+   "closest_m": 0.003
+  },
+  {
+   "step": 3,
+   "kind": "commit waypoint 2",
+   "target": [
+    6.579677760336278,
+    3.2459999999999996
+   ],
+   "reached": true,
+   "closest_m": 0.049
+  },
+  {
+   "step": 3,
+   "kind": "commit waypoint 3",
+   "target": [
+    2.55,
+    4.75
+   ],
+   "reached": true,
+   "closest_m": 0.003
+  },
+  {
+   "step": 3,
+   "kind": "goal",
+   "target": [
+    1.354,
+    5.2974
+   ],
+   "reached": true,
+   "pos_error_m": 0.147,
+   "t_arrive": 35.32,
+   "walk_time_s": 16.1,
+   "env_walk_time_s": 14.151,
+   "crossed_door_wall": true
+  }
+ ],
+ "events": [
+  {
+   "step": 3,
+   "kind": "commit",
+   "door": 1,
+   "t": 19.22
+  },
+  {
+   "kind": "executor_variant",
+   "commit_pts": [
+    [
+     6.5797,
+     1.2
+    ],
+    [
+     6.579677760336278,
+     1.9
+    ],
+    [
+     6.579677760336278,
+     3.2459999999999996
+    ],
+    [
+     2.55,
+     4.75
+    ],
+    [
+     1.354,
+     5.2974
+    ]
+   ]
+  },
+  {
+   "kind": "crossed_wall",
+   "door_x_at_wall": 6.577,
+   "offset_from_door_centre_m": -0.003,
+   "t": 22.38
+  }
+ ]
+}

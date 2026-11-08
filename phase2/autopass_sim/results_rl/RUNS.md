@@ -186,3 +186,57 @@ v2-A s1 has 1.7 % timeouts here (same loop as above).
   wheelchair, ≥ 1 too-narrow door and both policies succeeding whose Δtime equals the 25th-percentile
   saving (−10 s). Rule: dwells on door 0 (0.75 cm margin) to the cap, flags it, commits door 1 (35.7 s,
   45 sweeps); v2-A skips door 0 and commits door 1 (25.7 s, 25 sweeps). Matches the eval CSV.
+
+## Report 3 GUI check: frozen Go2 policy executes v2-A's plan in Isaac Lab (2026-11-07, branch report3-gui; simulated)
+
+Branch report3-gui off report3-v2 @ `f62791c`; no existing results changed. Outputs in `gui/` (this folder's `gui/`,
+code in `../gui/`). Everything here is simulated (Isaac Sim 5.1 / Isaac Lab 2.3, env_isaaclab used as is, nothing installed).
+
+**Plan export** (`python gui/export_plan.py --seed 5081 --out results_rl/gui/plan_5081.json`, apsim venv): the same
+world as the 2D replay (main setting, episode seed 5081, corridor layout, 3 doors with margins +0.75 / +8.90 / −0.37 cm
+for w_A 81.3 cm), v2-A training seed 0, mask shield, greedy. Exported geometry (walls, door centres, true clear
+widths, stop/rabbet profile, furniture footprints, start, goal) and the exact env paths. v2-A's episode is 3 steps:
+GOTO door 0 viewpoint 0, GOTO door 1 viewpoint 0, COMMIT door 1 (z-test PASS, fused margin +8.7 ± 0.5 cm);
+env time 25.7 s, 25 sweeps, all taken while walking (0 DWELL actions). Matches the 2D replay and the eval CSV.
+
+**Isaac Lab run** (`gui/isaac_go2_plan.py`, GUI on DISPLAY :0, not headless):
+- Scene: flat ground plane; door wall 2.4 m high with openings at the soffit width plus door stops, so the clear
+  width is the true stop-to-stop width; lintels from 2.03 m; outer walls 1.0 m high (kept low for the cameras);
+  furniture as 0.75 m boxes (height assumed, not in the 2D world); all static colliders. Visual-only floor strips:
+  door margin colour, viewpoints, goal.
+- Robot: Unitree-Go2-Velocity play config, 1 env, frozen `model_800.pt` loaded with rsl_rl's OnPolicyRunner;
+  observation noise, pushes, mass/friction randomisation off.
+- Controller: pure pursuit (lookahead 0.25 m, vx ≤ 0.5 m/s = env speed, |wz| ≤ 1 rad/s) writes the velocity
+  command; arrival tolerance 0.10 m (viewpoints) / 0.15 m (goal). At each viewpoint the robot turns to face the door
+  and holds 1.0 s (settle pause; v2-A's plan has 0 dwell time).
+- Logged every control step (50 Hz): pose, tilt, commands, max contact force on non-foot links, and 2D clearance of
+  all link origins to collider footprints (lintels excluded).
+
+Two executions of the same decisions:
+- `faithful`: the plan's paths followed as given.
+- `straight` (`--door-straight`): executor variant; the commit path near the door is replaced by a straight pass
+  through the door centre from 0.5 m before to 0.7 m after the wall, then the plan's remaining waypoints. Door choice,
+  order and commit are unchanged.
+
+| run | all waypoints reached | fall | max tilt | non-foot contacts | min link clearance | final pos error | time (env plan 25.7 s) |
+|---|---|---|---|---|---|---|---|
+| faithful | yes (5/5) | no | 3.9° | **11 steps, door 1 frame, max 364 N (RL_hip, FL_calf)** | 0.013 m | 0.149 m | 36.1 s |
+| straight | yes (6/6) | no | 3.9° | 0 | 0.258 m | 0.147 m | 36.8 s |
+
+Viewpoint arrival errors 0.098 / 0.099 m in both runs. Run time includes 2 × (turn to door + 1 s pause) ≈ 6-7 s
+and slower turns than the env's constant 0.5 m/s.
+
+Finding: the frozen Go2 policy walks v2-A's plan without falling, but the RL env's commit path is not
+collision-free for the Go2 body. The env plans for a point with 0.2 m grid inflation; on seed 5081 the commit path
+crosses the wall 0.27 m left of the door centre and turns ~60° left about 0.1 m past the wall, so the rear hip clips
+the door frame. A straight pass through the door centre before turning removes the contact. The RL env's decisions
+are not affected; this is an executor/footprint issue for deployment (rule for hardware: centre the door crossing and
+go straight ≥ 0.5 m past the wall).
+
+Outputs (`results_rl/gui/`): `plan_5081.json`; `go2_v2A_5081_{faithful,straight}.mp4` (follow cam, 25 fps,
+36 s / 37 s, label "Simulated — Isaac Lab, frozen Go2 policy"); `shot_{faithful,straight}_{overview,at_viewpoint,
+at_commit_door,through_door}.png`; `trajectory_{tag}.csv`; `walkability_{tag}.json`; `walk_paths_5081.png`
+(`python gui/plot_walk.py`). Console logs `isaac_run_*.log` are not tracked.
+Notes: the ground shows Isaac's default grid (the plane terrain ignores the custom floor colour). PhysX on GPU is not
+bit-reproducible between runs: the straight variant was rerun after a blank overview frame (viewport warm-up, now
+retried) and gave 36.8 s vs 37.1 s with the same contacts (0), clearance (0.258 vs 0.257 m) and errors.
