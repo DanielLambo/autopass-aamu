@@ -199,3 +199,68 @@ def test_viewpoints_option_masks_other_viewpoints_and_keeps_rule():
         a = rollout(AutoPassEnv(), RulePolicy(), seed=seed); b = rollout(AutoPassEnv(viewpoints=(0,)), RulePolicy(), seed=seed)
         a.pop("final_obs"); b.pop("final_obs")
         assert a == b
+
+
+# ---------------------------------------------------------------- path_mode="fmm"
+def _segment_free(free, res, a, b, ds=0.02):
+    n = max(1, int(np.ceil(np.linalg.norm(b - a) / ds)))
+    for t in np.linspace(0, 1, n + 1):
+        q = a + t * (b - a)
+        i, j = int(q[0] / res), int(q[1] / res)
+        if not (0 <= j < free.shape[0] and 0 <= i < free.shape[1] and free[j, i]):
+            return False
+    return True
+
+
+def test_fmm_paths_collision_free_and_reach_target():
+    from autopass_rl import fmm
+    env = AutoPassEnv(path_mode="fmm")
+    n_paths = 0
+    for seed in range(5000, 5012):
+        env.reset(seed=seed)
+        res = env.world.res
+        for i in range(len(env.doors)):
+            for k in range(K):
+                t = env.vp[i, k]
+                if t is None:
+                    continue
+                p = env.fc.path(("vp", i, k), env.free_near, env.pos, t)
+                assert p is not None, (seed, i, k)
+                assert np.allclose(p[-1], t) and np.allclose(p[0], env.pos)
+                assert all(_segment_free(env.free_near, res, a, b) for a, b in zip(p[:-1], p[1:])), (seed, i, k)
+                n_paths += 1
+            path, L = env._commit_path(i)
+            assert path is not None and np.allclose(path[-1], env.world.goal)
+            fr = env.field[i][1]
+            assert all(_segment_free(fr, res, a, b) for a, b in zip(path[:-1], path[1:])), (seed, i)
+            assert env.world.door_crossed(path).id == env.doors[i].id
+            n_paths += 1
+    assert n_paths > 100
+
+
+def test_fmm_deterministic_for_a_seed():
+    a = rollout(AutoPassEnv(path_mode="fmm"), RulePolicy(), seed=5003)
+    b = rollout(AutoPassEnv(path_mode="fmm"), RulePolicy(), seed=5003)
+    assert a["traj"] == b["traj"] and a["outcome"] == b["outcome"]
+    assert np.array_equal(a["final_obs"], b["final_obs"])
+    c = rollout(AutoPassEnv(path_mode="fmm"), random_policy, seed=11)
+    d = rollout(AutoPassEnv(path_mode="fmm"), random_policy, seed=11)
+    assert c["traj"] == d["traj"] and np.array_equal(c["final_obs"], d["final_obs"])
+
+
+def test_fmm_route_features_come_from_the_fmm_field():
+    from autopass_rl import fmm
+    from autopass_sim.planners import path_length
+    env = AutoPassEnv(path_mode="fmm")
+    env.reset(seed=5081)
+    for i in range(len(env.doors)):
+        v = fmm.value_at(env.field[i][0], env.pos, env.world.res)
+        assert env.route[i][1] == pytest.approx(v)
+        path, L = env._commit_path(i)                  # following the same field: length close to its value
+        assert L == pytest.approx(v, rel=0.03)
+
+
+def test_astar_is_the_default_path_mode():
+    a = rollout(AutoPassEnv(), RulePolicy(), seed=5003)
+    b = rollout(AutoPassEnv(path_mode="astar"), RulePolicy(), seed=5003)
+    assert a["traj"] == b["traj"] and np.array_equal(a["final_obs"], b["final_obs"])

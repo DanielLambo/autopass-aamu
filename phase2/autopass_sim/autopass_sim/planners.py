@@ -79,7 +79,8 @@ def shortcut(path, free, cost, res):
     return np.array(out)
 
 
-def astar(world, start, goal, cost, free=None):
+def astar(world, start, goal, cost, free=None, smooth=True):
+    """8-connected A* on the free grid; smooth=False returns the raw cell path (no shortcutting)."""
     free = world.free if free is None else free
     res = world.res
     ny, nx = free.shape
@@ -115,7 +116,7 @@ def astar(world, start, goal, cost, free=None):
         cells.append((k % nx, k // nx))
         k = parent[k // nx, k % nx]
     path = [np.asarray(start, float)] + [_center(c, res) for c in reversed(cells[1:-1])] + [np.asarray(goal, float)]
-    return shortcut(np.array(path), free, cost, res)
+    return shortcut(np.array(path), free, cost, res) if smooth else np.array(path)
 
 
 def rrt_star(world, start, goal, cost, rng, free=None, iters=2500, step=0.6, goal_tol=0.3,

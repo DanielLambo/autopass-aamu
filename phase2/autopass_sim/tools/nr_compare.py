@@ -26,9 +26,9 @@ W_A = 81.3
 
 
 def run(args):
-    name, agent_path, vps, worlds = args
+    name, agent_path, vps, worlds, path_mode = args
     torch.set_num_threads(1)
-    env = AutoPassEnv(shield=agent_path is not None, shield_mode="mask", viewpoints=vps)
+    env = AutoPassEnv(shield=agent_path is not None, shield_mode="mask", viewpoints=vps, path_mode=path_mode)
     agent = load_agent(agent_path) if agent_path else None
     rows = []
     for lay, ws in worlds:
@@ -82,12 +82,14 @@ def main():
     ap.add_argument("--out", default="results_rl/v2/addendum")
     ap.add_argument("--procs", type=int, default=4)
     ap.add_argument("--reuse", action="store_true", help="re-tabulate saved episodes without rerunning")
+    ap.add_argument("--path-mode", default="astar", choices=["astar", "fmm"], help="RL-env path planner")
+    ap.add_argument("--report2-dir", default=None, help="reuse a Report 2 rerun folder instead of rerunning it")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
     # Report 2 planners on the same worlds (same code as phase2-sim), checked against results_rev
-    r2dir = os.path.join(a.out, "report2_rerun")
-    if not a.reuse:
+    r2dir = a.report2_dir or os.path.join(a.out, "report2_rerun")
+    if not a.reuse and not a.report2_dir:
         subprocess.run([sys.executable, "-m", "autopass_sim.experiments", "--worlds", "300", "--rrt-worlds", "0",
                         "--methods", "B2-nr,P-A*(4)-nr,P-A*(4)", "--procs", str(a.procs), "--out", r2dir,
                         "--tag", "_nr"], check=True, stdout=subprocess.DEVNULL)
@@ -108,7 +110,7 @@ def main():
         pols = [("rule, no reposition (vp 0)", None, (0,))] + \
                [(f"v2-A s{s}, no reposition (vp 0)", agent.format(s), (0,)) for s in range(3)] + \
                [(f"v2-A s{s}, all 5 viewpoints", agent.format(s), None) for s in range(3)]
-        jobs = [(name, p, vps, c) for name, p, vps in pols for c in chunks]
+        jobs = [(name, p, vps, c, a.path_mode) for name, p, vps in pols for c in chunks]
         with Pool(a.procs) as pool:
             env_rows = [r for rs in pool.map(run, jobs) for r in rs]
         df = pd.concat([pd.DataFrame(env_rows), r2], ignore_index=True)
@@ -125,7 +127,7 @@ def main():
           md_table(tab), ""]
     open(os.path.join(a.out, "nr_table.md"), "w").write("\n".join(md))
     print("\n".join(md))
-    json.dump(dict(worlds="room+corridor 1000-1299", w_A=W_A, report2_repro=repro), open(os.path.join(a.out, "nr_args.json"), "w"))
+    json.dump(dict(worlds="room+corridor 1000-1299", w_A=W_A, report2_repro=repro, path_mode=a.path_mode), open(os.path.join(a.out, "nr_args.json"), "w"))
 
 
 if __name__ == "__main__":

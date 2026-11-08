@@ -58,6 +58,9 @@ POLICY_SETS = {
                 ("eval_noshield_nowa", "eval_shield_nowa")) for s in range(3)] +
               [(f"A_mask_budget_s{s}", f"v2/A_mask_budget_s{s}", "v2-A", ("eval_noshield", "eval_shield")) for s in range(3)],
 }
+# path_mode="fmm" re-evaluation (no retraining): the v2 set plus the unshielded-trained v1 agents
+POLICY_SETS["fmm"] = POLICY_SETS["v2"] + \
+    [(f"ppolag_s{s}", f"ppolag_s{s}", "v1 PPO-Lag", V1_EVALS) for s in range(3)]
 GROUP = {}   # run name -> group label, filled from the chosen policy set
 METRICS = ("path_m", "time_s", "scans")
 OUTCOMES = ("success", "unsafe", "flag", "timeout")
@@ -99,8 +102,9 @@ def run_episode(env, policy, seed):
 
 def _job(args):
     torch.set_num_threads(1)
-    setting, pol, eval_shield, shield_mode, hide_wA, agent_path, seeds = args
-    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, hide_wA=hide_wA, **SETTINGS[setting])
+    setting, pol, eval_shield, shield_mode, hide_wA, agent_path, seeds, path_mode = args
+    env = AutoPassEnv(shield=eval_shield, shield_mode=shield_mode, hide_wA=hide_wA, path_mode=path_mode,
+                      **SETTINGS[setting])
     policy = RulePolicy() if agent_path is None else load_agent(agent_path)
     return [dict(setting=setting, policy=pol, eval_shield=eval_shield, **run_episode(env, policy, s))
             for s in seeds]
@@ -224,6 +228,7 @@ def main():
     ap.add_argument("--out", default="results_rl/eval")
     ap.add_argument("--procs", type=int, default=os.cpu_count())
     ap.add_argument("--set", default="v1", choices=list(POLICY_SETS))
+    ap.add_argument("--path-mode", default="astar", choices=["astar", "fmm"])
     a = ap.parse_args()
     GROUP.update({run: label for run, _, label, _ in POLICY_SETS[a.set]})
     args_seed0 = a.seed0
@@ -236,7 +241,7 @@ def main():
         for run, d, _, evals in POLICY_SETS[a.set]:
             p = os.path.join(a.runs_dir, d, "agent.pt")
             pols += [(f"{run}|{ev}", *(EVALS[ev] + (False,))[:3], p) for ev in evals]
-        jobs = [(setting, name, sh, mode, hw, p, c) for name, sh, mode, hw, p in pols for c in chunks]
+        jobs = [(setting, name, sh, mode, hw, p, c, a.path_mode) for name, sh, mode, hw, p in pols for c in chunks]
         with Pool(a.procs) as pool:
             ep = pd.DataFrame([r for rs in pool.map(_job, jobs, chunksize=1) for r in rs])
         ep.to_csv(os.path.join(a.out, f"episodes_{setting}.csv"), index=False)

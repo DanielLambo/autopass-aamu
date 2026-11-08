@@ -23,8 +23,8 @@ from autopass_rl.evaluate import load_agent
 from autopass_rl.policies import RulePolicy
 
 
-def record(seed, agent_path):
-    env = AutoPassEnv(shield=agent_path is not None, shield_mode="mask")
+def record(seed, agent_path, path_mode="astar"):
+    env = AutoPassEnv(shield=agent_path is not None, shield_mode="mask", path_mode=path_mode)
     obs, info = env.reset(seed=seed)
     tr = Tracer()
     env.cfg.tracer = tr

@@ -25,6 +25,7 @@ from autopass_sim.observability import ObsModel
 from autopass_sim.mission import Config, _observe
 from autopass_sim.planners import astar, free_with_blocked, path_length, resample
 from autopass_sim.sensor import view_geometry, jambs_visible
+from autopass_rl import fmm
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import dijkstra
 
@@ -71,7 +72,8 @@ class AutoPassEnv(gym.Env):
     def __init__(self, layouts=("room", "corridor"), agents="profiles", shield=False,
                  time_cost=0.05, success_reward=10.0, max_steps=80, max_time=300.0,
                  commit_needs_trusted=True, calib=None, rho_calib=None, sensor_mode="raw",
-                 scan_budget=None, shield_mode="mask", budget_dist=None, hide_wA=False, viewpoints=None):
+                 scan_budget=None, shield_mode="mask", budget_dist=None, hide_wA=False, viewpoints=None,
+                 path_mode="astar"):
         self.layouts = list(layouts)
         self.scan_budget = scan_budget        # max total sweeps per episode (None = unlimited); stress setting
         self._fixed_budget = scan_budget
@@ -87,6 +89,11 @@ class AutoPassEnv(gym.Env):
         # viewpoints: allowed GOTO viewpoint indices (None = all K). (0,) = only the square-on commit point,
         # i.e. no repositioning to a better view (Report 2 "-nr" scenario).
         self.viewpoints = None if viewpoints is None else set(viewpoints)
+        # path_mode: "astar" = 8-connected A* + line-of-sight shortcut, route features from a grid Dijkstra field
+        # (Report 2/3 default). "fmm" = fast-marching travel-time field per target on the same inflated grid;
+        # paths follow its gradient and route features read the same field.
+        assert path_mode in ("astar", "fmm")
+        self.path_mode = path_mode
         self.agents = agents                  # "profiles" (wheelchair/walker) | "uniform" (66-92 cm)
         self.shield = shield
         self.time_cost, self.success_reward = time_cost, success_reward
@@ -138,9 +145,13 @@ class AutoPassEnv(gym.Env):
                 self.vp[i, k] = self._snap(np.array([d.xc + VIEWPOINTS[k, 0], d.yw - VIEWPOINTS[k, 1]]))
         # one goal-rooted distance field per door (other doors blocked); None once the door is rejected
         self.field = {}
+        self.fc = fmm.FieldCache(self.world.res) if self.path_mode == "fmm" else None
         for i, d in enumerate(self.doors):
             others = {o.id for o in self.world.doors if o.id != d.id}
             fr = free_with_blocked(self.world, others)
+            if self.path_mode == "fmm":
+                self.field[i] = (self.fc.get(("goal", i), fr, self.world.goal)[0], fr)
+                continue
             gc = (np.floor(self.world.goal / self.world.res) + 0.5) * self.world.res
             self.field[i] = (distance_field(fr, self.world.res, self.world.goal) +
                              float(np.linalg.norm(self.world.goal - gc)), fr)
@@ -174,6 +185,9 @@ class AutoPassEnv(gym.Env):
             return self.route[i]
         D = self.field[i][0]
         res = self.world.res
+        if self.path_mode == "fmm":
+            v = fmm.value_at(D, self.pos, res)
+            return (None, v) if np.isfinite(v) else (None, np.inf)
         cx, cy = int(self.pos[0] / res), int(self.pos[1] / res)
         if not (0 <= cy < D.shape[0] and 0 <= cx < D.shape[1]) or not np.isfinite(D[cy, cx]):
             return (None, np.inf)
@@ -184,6 +198,9 @@ class AutoPassEnv(gym.Env):
         """Exact A* path through door i (other doors blocked), for the executed COMMIT."""
         fr = self.field[i][1] if self.field.get(i) is not None else \
             free_with_blocked(self.world, {d.id for d in self.world.doors if d.id != self.doors[i].id})
+        if self.path_mode == "fmm":
+            p = self.fc.path(("goal", i), fr, self.pos, self.world.goal)
+            return (p, path_length(p)) if p is not None else self.route[i]
         p = astar(self.world, self.pos, self.world.goal, np.ones_like(self.world.free, float), free=fr)
         return (p, path_length(p)) if p is not None else self.route[i]
 
@@ -242,7 +259,10 @@ class AutoPassEnv(gym.Env):
         if a < self.A_DWELL:                        # GOTO
             i, k = divmod(a, K)
             key = (round(float(self.pos[0]), 2), round(float(self.pos[1]), 2), i, k)
-            if key not in self.goto_cache:
+            if self.path_mode == "fmm":
+                self.goto_cache[key] = None if self.vp[i, k] is None else \
+                    self.fc.path(("vp", i, k), self.free_near, self.pos, self.vp[i, k])
+            elif key not in self.goto_cache:
                 self.goto_cache[key] = astar(self.world, self.pos, self.vp[i, k],
                                              np.ones_like(self.world.free, float), free=self.free_near)
             path = self.goto_cache[key]
