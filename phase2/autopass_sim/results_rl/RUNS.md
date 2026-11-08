@@ -186,3 +186,93 @@ v2-A s1 has 1.7 % timeouts here (same loop as above).
   wheelchair, ≥ 1 too-narrow door and both policies succeeding whose Δtime equals the 25th-percentile
   saving (−10 s). Rule: dwells on door 0 (0.75 cm margin) to the cap, flags it, commits door 1 (35.7 s,
   45 sweeps); v2-A skips door 0 and commits door 1 (25.7 s, 25 sweeps). Matches the eval CSV.
+
+## Report 3 FMM paths (2026-11-08, branch report3-fmm off tag report3-v2; simulated, no retraining)
+
+Code: `AutoPassEnv(path_mode="fmm")` (default `"astar"` unchanged), new `autopass_rl/fmm.py`.
+FMM solves the Eikonal equation |∇T| = 1 with scikit-fmm on the same inflated occupancy grid (0.1 m cells,
+0.20 m inflation): one travel-time field per target (each viewpoint on the start-side grid, and the goal for
+each door with the other doors blocked), cached per episode. Paths follow −∇T from the robot's position
+(0.05 m steps, one-sided gradients next to blocked cells, steepest-neighbour fallback, straight final
+0.12 m), then the usual 0.25 m scan spacing. In fmm mode the route-length features read the same goal field
+at the robot's position. `planners.astar` gained `smooth=False` (raw cell path) for the comparison only; its
+default is unchanged. scikit-fmm 2025.6.23 installed into `~/venvs/apsim`.
+
+Checks:
+- Tests: 29 passed. New: FMM paths are collision-free on the inflated grid and end at their target (12 worlds,
+  every viewpoint and commit path), FMM episodes repeat exactly for a seed, route features equal the FMM field
+  value and match the commit-path length within 3%, astar is the default.
+- A* mode reproduces the committed evaluations exactly: `--set v2` matches `v2/eval` episode for episode in all
+  4 settings, and the full FMM policy set run with `--path-mode astar` matches `v2/eval` + `eval/`
+  (55,200 episodes).
+
+Commands:
+```
+python -m autopass_rl.evaluate --set fmm --path-mode fmm --settings main uniform budget20 budget12 --out results_rl/fmm/eval
+python tools/nr_compare.py --path-mode fmm --out results_rl/fmm/nr --report2-dir results_rl/v2/addendum/report2_rerun
+python tools/fmm_compare.py            # fmm_vs_astar.{md,csv}, fmm_vs_astar_per_seed.csv, nr/nr_fmm_vs_astar.md
+python tools/path_quality.py --out results_rl/fmm/path_quality
+python tools/fig_fmm_paths.py          # fig_fmm_paths.png
+```
+Policy set `fmm`: rule, v2-A and v2-B (shield off/on), v1 shield-trained (post shield), v1 unshielded-trained
+(no shield / post shield); 23 policy-eval combinations × 600 episodes × 4 settings.
+
+Runtime (20 CPU threads): FMM eval 692 s, FMM no-reposition 158 s, path quality 64 s, figure ~10 s;
+A* reproduction checks 493 s + 731 s. Total about 36 min, 15 min of it for the FMM results.
+
+### Outcomes: FMM vs A*, same policies and episodes (`fmm_vs_astar.md`)
+
+| setting | policy | success A* → FMM | unsafe A* → FMM | timeout A* → FMM | time s A* → FMM | same outcome |
+|---|---|---|---|---|---|---|
+| main | rule | 97.5 → 97.5 | 0 → 0 | 0 → 0 | 27.61 → 27.57 | 100% |
+| main | v2-A, mask shield | 97.78 → 97.78 | 0 → 0 | 1.06 → 1.00 | 26.60 → 26.34 | 99.9% |
+| main | v2-B, no shield | 96.22 → 96.28 | 0.22 → 0.11 | 3.56 → 3.56 | 30.39 → 30.47 | 99.4% |
+| main | v1, no shield | 98.28 → 98.50 | 1.28 → 1.06 | 0.44 → 0.44 | 24.78 → 24.74 | 99.7% |
+| uniform | v2-A, mask shield | 97.61 → 97.56 | 0 → 0 | 1.28 → 1.28 | 26.46 → 26.49 | 99.9% |
+| budget20 | v2-A, mask shield | 52.83 → 53.50 | 0 → 0 | 0 → 0 | 17.43 → 17.48 | 99.0% |
+| budget12 | rule | 30.00 → 29.33 | 0 → 0 | 0 → 0 | 12.17 → 12.04 | 99.0% |
+| budget12 | v2-A, mask shield | 32.44 → 33.06 | 0 → 0 | 0 → 0 | 12.32 → 12.41 | 98.7% |
+
+Percent of episodes; PPO rows pool 3 training seeds. No success difference is significant for any policy,
+setting or training seed (smallest exact McNemar p = 0.125). Unsafe commits stay at 0 for every shielded policy.
+
+Where FMM is worse (all small, none significant):
+- Success: rule −0.17 points on uniform (1 episode) and −0.67 on budget12 (4 episodes); v2-A with the
+  mask shield −0.05 on uniform (1 episode of 1800). Without a shield: v1 unshielded −0.22 (budget20) and
+  −0.28 (budget12), v2-A −0.06 (budget20) and −0.05 (budget12); v1 with post shield −0.05 (budget20).
+- Unsafe, unshielded policies only: v2-B +0.06 (uniform) and +0.17 points (budget12); v1 unshielded +0.11
+  (budget20) and +0.39 (budget12); v2-A without shield +0.06 (budget20, budget12).
+- Timeouts: v1 shield-trained with post shield +0.28 (budget20) and +0.33 points (budget12).
+- FMM GOTO paths are 0.38% longer than shortcut A* on average and have slightly more sharp turns (below).
+
+### No-repositioning worlds (`nr/nr_fmm_vs_astar.md`)
+
+Counts out of 600; 0 unsafe in both modes for every policy. Outcomes are identical for the rule, v2-A s0/s1
+with no repositioning and v2-A s0 with all viewpoints. v2-A s2 (no reposition) and s1/s2 (all viewpoints)
+change on 1 world each, in each case a flag or timeout becoming a success. Mean times change by −0.21 to
+−0.02 s.
+
+### Path quality, main setting (`path_quality/path_quality_main.md`)
+
+Same 6,759 motion queries (4,414 GOTO, 2,345 COMMIT) from the A*-mode episodes of the rule and v2-A s0-2,
+each planned three ways on the same grid.
+
+| metric | 8-connected A* (raw) | A* + shortcut (env default) | FMM |
+|---|---|---|---|
+| mean length, all / commit (m) | 4.753 / 6.816 | 4.570 / 6.467 | 4.572 / 6.461 |
+| excess over FMM, mean per path | +3.74% | −0.23% | — |
+| heading changes > 20° per path | 2.24 | 0.52 | 0.55 |
+| commit paths crossing > 0.15 m off the door centre | 341 / 2345 | 1303 / 2345 | 857 / 2345 |
+| mean crossing offset (m) | 0.096 | 0.152 | 0.130 |
+
+The raw 8-connected path is 3.7% longer than FMM, but the env never executes it: after line-of-sight
+shortcutting A* is as short as FMM. FMM crosses doors closer to the centre than shortcut A* (857 vs 1303
+paths off by more than 0.15 m), but it is still a shortest path and cuts door corners in 37% of commits,
+so it does not by itself fix the door-frame contact seen in the Isaac check. The raw cell path crosses
+nearest the centre only because its zig-zags happen to line up with the opening.
+
+`fig_fmm_paths.png`: v2-A (training seed 0) on episode seed 5081 with A* and FMM paths, rendered like the
+2D replay. Same decisions and outcome (door 1, 25.7 s); 12.85 m vs 12.84 m.
+
+Conclusion: swapping A* for FMM paths changes no result in a meaningful way. Decisions, safety and times are
+the same within noise, and the policies trained on A* paths transfer to FMM paths without retraining.
